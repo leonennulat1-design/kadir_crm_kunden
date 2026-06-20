@@ -3,13 +3,13 @@ import Sidebar from './Sidebar.jsx';
 import Header from './Header.jsx';
 
 const PAGE_META = {
-  '/dashboard': { title: 'Dashboard', subtitle: 'Übersicht deiner Pipeline und Aktivitäten' },
-  '/leads': { title: 'Leads', subtitle: 'Verwalte deine eingehenden Interessenten' },
-  '/contacts': { title: 'Kontakte', subtitle: 'Dein Kontaktverzeichnis' },
-  '/deals': { title: 'Deals', subtitle: 'Aktuelle Verkaufschancen' },
-  '/meetings': { title: 'Meetings', subtitle: 'Termine und Kalender' },
-  '/email': { title: 'E-Mail', subtitle: 'Posteingang und Konversationen' },
-  '/settings': { title: 'Einstellungen', subtitle: 'Konto und Workspace' },
+  '/dashboard': { title: 'Dashboard', subtitle: 'Fortschritt, Muster und Umsatz im Überblick' },
+  '/kunden': { title: 'Kunden', subtitle: 'Zahlende Coaching-Kunden, pseudonymisiert geführt' },
+  '/faelle': { title: 'Fälle', subtitle: 'Dokumentierte Konfliktfälle für die Musteranalyse' },
+  '/sessions': { title: 'Sessions', subtitle: 'Session-Dokumentation mit Einverständnis' },
+  '/muster': { title: 'Muster', subtitle: 'Methoden-Bibliothek aus wiederkehrenden Dynamiken' },
+  '/umsatz': { title: 'Umsatz', subtitle: 'Erlöse nach Stufe' },
+  '/einstellungen': { title: 'Einstellungen', subtitle: 'Workspace' },
 };
 
 export default function Layout() {

@@ -2,21 +2,21 @@ import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard,
   Users,
-  Contact,
-  Briefcase,
+  FolderOpen,
   CalendarDays,
-  Mail,
+  Layers,
+  Euro,
   Settings as SettingsIcon,
 } from 'lucide-react';
 
 const NAV_ITEMS = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { to: '/leads', label: 'Leads', icon: Users },
-  { to: '/contacts', label: 'Kontakte', icon: Contact },
-  { to: '/deals', label: 'Deals', icon: Briefcase },
-  { to: '/meetings', label: 'Meetings', icon: CalendarDays },
-  { to: '/email', label: 'E-Mail', icon: Mail },
-  { to: '/settings', label: 'Einstellungen', icon: SettingsIcon },
+  { to: '/kunden', label: 'Kunden', icon: Users },
+  { to: '/faelle', label: 'Fälle', icon: FolderOpen },
+  { to: '/sessions', label: 'Sessions', icon: CalendarDays },
+  { to: '/muster', label: 'Muster', icon: Layers },
+  { to: '/umsatz', label: 'Umsatz', icon: Euro },
+  { to: '/einstellungen', label: 'Einstellungen', icon: SettingsIcon },
 ];
 
 export default function Sidebar() {
@@ -27,7 +27,7 @@ export default function Sidebar() {
         <div>
           <div className="sidebar-brand-name">Kadir CRM</div>
           <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
-            Workspace
+            Kunden-Workspace
           </div>
         </div>
       </div>
@@ -56,42 +56,16 @@ export default function Sidebar() {
             borderRadius: 12,
             border: '1px solid var(--border)',
             background: 'var(--surface-2)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 10,
+            fontSize: 11.5,
+            color: 'var(--muted)',
+            lineHeight: 1.5,
           }}
         >
-          <div
-            style={{
-              width: 32,
-              height: 32,
-              borderRadius: '50%',
-              background: 'linear-gradient(135deg, #ff9b26, #ee4c27)',
-              display: 'grid',
-              placeItems: 'center',
-              color: '#fff',
-              fontFamily: 'var(--font-heading)',
-              fontWeight: 700,
-              fontSize: 13,
-            }}
-          >
-            K
-          </div>
-          <div style={{ minWidth: 0 }}>
-            <div
-              style={{
-                fontFamily: 'var(--font-heading)',
-                fontWeight: 600,
-                fontSize: 13,
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-              }}
-            >
-              Kadir
-            </div>
-            <div style={{ fontSize: 11, color: 'var(--muted)' }}>Admin</div>
-          </div>
+          <strong style={{ color: 'var(--orange)', fontFamily: 'var(--font-heading)' }}>
+            Datenschutz
+          </strong>
+          <br />
+          Keine Klarnamen, keine Mails, keine Telefonnummern. Nur Kundennummern.
         </div>
       </div>
     </aside>

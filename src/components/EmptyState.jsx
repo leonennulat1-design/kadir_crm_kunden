@@ -1,49 +1,51 @@
 import { Sparkles } from 'lucide-react';
 
-export default function PlaceholderPage({ title, description }) {
+export default function EmptyState({ icon: Icon = Sparkles, title, description, action }) {
   return (
     <div
       className="card fade-up"
       style={{
-        padding: 64,
+        padding: 56,
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
         textAlign: 'center',
-        gap: 16,
+        gap: 14,
       }}
     >
       <div
         style={{
-          width: 60,
-          height: 60,
-          borderRadius: 16,
-          background:
-            'linear-gradient(135deg, rgba(255,155,38,0.18), rgba(238,76,39,0.12))',
+          width: 56,
+          height: 56,
+          borderRadius: 14,
+          background: 'linear-gradient(135deg, rgba(255,155,38,0.15), rgba(238,76,39,0.1))',
           display: 'grid',
           placeItems: 'center',
           color: 'var(--orange)',
           border: '1px solid rgba(255, 155, 38, 0.25)',
         }}
       >
-        <Sparkles size={24} strokeWidth={1.75} />
+        <Icon size={22} strokeWidth={1.75} />
       </div>
       <div>
         <div
           style={{
             fontFamily: 'var(--font-heading)',
             fontWeight: 700,
-            fontSize: 18,
-            marginBottom: 6,
+            fontSize: 16,
+            marginBottom: 4,
           }}
         >
           {title}
         </div>
-        <div style={{ color: 'var(--muted)', fontSize: 13.5, maxWidth: 420 }}>
-          {description}
-        </div>
+        {description && (
+          <div style={{ color: 'var(--muted)', fontSize: 13.5, maxWidth: 380 }}>
+            {description}
+          </div>
+        )}
       </div>
+      {action}
     </div>
   );
 }
