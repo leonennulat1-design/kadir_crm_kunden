@@ -8,6 +8,7 @@ import Muster from './pages/Muster.jsx';
 import Content from './pages/Content.jsx';
 import Umsatz from './pages/Umsatz.jsx';
 import Auswertung from './pages/Auswertung.jsx';
+import Feedback from './pages/Feedback.jsx';
 import Settings from './pages/Settings.jsx';
 
 export default function App() {
@@ -23,6 +24,7 @@ export default function App() {
         <Route path="/content" element={<Content />} />
         <Route path="/umsatz" element={<Umsatz />} />
         <Route path="/auswertung" element={<Auswertung />} />
+        <Route path="/feedback" element={<Feedback />} />
         <Route path="/einstellungen" element={<Settings />} />
       </Route>
     </Routes>

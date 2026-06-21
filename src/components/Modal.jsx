@@ -20,12 +20,18 @@ export default function Modal({ open, onClose, title, children, footer, width = 
       onClick={onClose}
       style={{
         position: 'fixed',
-        inset: 0,
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        width: '100vw',
+        height: '100vh',
         background: 'rgba(0,0,0,0.6)',
         backdropFilter: 'blur(4px)',
         zIndex: 100,
-        display: 'grid',
-        placeItems: 'center',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
         padding: 24,
       }}
     >
@@ -34,7 +40,8 @@ export default function Modal({ open, onClose, title, children, footer, width = 
         style={{
           width: '100%',
           maxWidth: width,
-          maxHeight: '90vh',
+          maxHeight: 'calc(100vh - 48px)',
+          margin: 'auto',
           display: 'flex',
           flexDirection: 'column',
           background: 'var(--surface)',
@@ -51,6 +58,7 @@ export default function Modal({ open, onClose, title, children, footer, width = 
             justifyContent: 'space-between',
             padding: '18px 22px',
             borderBottom: '1px solid var(--border)',
+            flexShrink: 0,
           }}
         >
           <h2 style={{ fontSize: 16, fontWeight: 700, letterSpacing: '-0.01em' }}>
@@ -65,7 +73,9 @@ export default function Modal({ open, onClose, title, children, footer, width = 
             <X size={18} strokeWidth={1.75} />
           </button>
         </div>
-        <div style={{ padding: 22, overflowY: 'auto', flex: 1 }}>{children}</div>
+        <div style={{ padding: 22, overflowY: 'auto', flex: 1, minHeight: 0 }}>
+          {children}
+        </div>
         {footer && (
           <div
             style={{
@@ -75,6 +85,7 @@ export default function Modal({ open, onClose, title, children, footer, width = 
               gap: 10,
               justifyContent: 'flex-end',
               background: 'rgba(0,0,0,0.15)',
+              flexShrink: 0,
             }}
           >
             {footer}

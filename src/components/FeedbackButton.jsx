@@ -48,7 +48,7 @@ export default function FeedbackButton() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <div style={{ fontSize: 12.5, color: 'var(--muted)' }}>
             Was nervt, was fehlt, was sollte anders sein? Zeitstempel und aktuelle Seite werden
-            automatisch mitgespeichert. Du findest deine Einträge unter <em>Einstellungen</em>.
+            automatisch mitgespeichert. Du findest deine Einträge unter <em>Feedback</em>.
           </div>
           <textarea
             className="input"

@@ -83,7 +83,7 @@ function buildMarkdown(state, usage) {
     lines.push(`- Content-Idee: ${s.contentIdea || '–'}`);
     if (s.contentAngle) lines.push(`- Content-Winkel: ${s.contentAngle}`);
     if (s.contentStatus) lines.push(`- Content-Status: ${s.contentStatus}`);
-    lines.push(`- Einverständnis: ${s.consentGiven ? 'ja' : 'nein'}${s.consentFileName ? ` (Datei: ${s.consentFileName})` : ''}`);
+    lines.push(`- Einverständnis: ${s.consentGiven ? 'ja' : 'nein'}`);
     if (s.transcript) {
       lines.push(`- Transkript (anonymisiert):`);
       lines.push(`  > ${s.transcript.replace(/\n/g, '\n  > ')}`);

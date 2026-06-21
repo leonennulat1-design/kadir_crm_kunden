@@ -5,16 +5,11 @@ import {
   Trash2,
   ShieldCheck,
   Wand2,
-  Upload,
-  Download,
-  X,
   AlertCircle,
 } from 'lucide-react';
 import { useStore } from '../store/StoreProvider.jsx';
 import { SESSION_TYPES, formatDate } from '../lib/format.js';
-import { saveFile, downloadFile } from '../lib/files.js';
 import { parseDescription, DESCRIPTION_LABELS } from '../lib/parseDescription.js';
-import { uid } from '../lib/ids.js';
 import DataTable from '../components/DataTable.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import Modal from '../components/Modal.jsx';
@@ -35,16 +30,17 @@ function emptyForm() {
     transcript: '',
     consentGiven: false,
     contentIdea: '',
-    consentFile: null,
+    contentAngle: '',
+    contentStatus: 'Idee',
   };
 }
 
 export default function Sessions() {
-  const { state, createSession, deleteSession } = useStore();
+  const { state, createSession, updateSession, deleteSession } = useStore();
   const [open, setOpen] = useState(false);
+  const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(emptyForm);
   const [error, setError] = useState('');
-  const [busy, setBusy] = useState(false);
 
   const caseByNumber = useMemo(
     () => Object.fromEntries(state.cases.map((c) => [c.id, c.number])),
@@ -70,8 +66,32 @@ export default function Sessions() {
   );
 
   const startCreate = () => {
+    setEditingId(null);
     setForm(emptyForm());
     setError('');
+    setOpen(true);
+  };
+
+  const startEdit = (s) => {
+    setEditingId(s.id);
+    setError('');
+    setForm({
+      caseId: s.caseId,
+      date: s.date ?? '',
+      type: s.type || SESSION_TYPES[0].value,
+      description: s.description ?? '',
+      intervention: s.intervention ?? '',
+      ahaMoment: s.ahaMoment ?? '',
+      result: s.result ?? '',
+      nextStep: s.nextStep ?? '',
+      nextContact: s.nextContact ?? '',
+      recordingLink: s.recordingLink ?? '',
+      transcript: s.transcript ?? '',
+      consentGiven: s.consentGiven ?? false,
+      contentIdea: s.contentIdea ?? '',
+      contentAngle: s.contentAngle ?? '',
+      contentStatus: s.contentStatus || 'Idee',
+    });
     setOpen(true);
   };
 
@@ -90,45 +110,51 @@ export default function Sessions() {
     }));
   };
 
-  const save = async () => {
+  const save = () => {
     if (!form.caseId) return setError('Bitte einen Fall auswählen.');
     if (!form.consentGiven)
       return setError('Ohne Einverständnis-Häkchen kann die Session nicht gespeichert werden.');
-    setBusy(true);
     setError('');
     try {
-      let consentFileId = '';
-      let consentFileName = '';
-      let consentFileType = '';
-      if (form.consentFile) {
-        consentFileId = uid();
-        await saveFile(consentFileId, form.consentFile);
-        consentFileName = form.consentFile.name;
-        consentFileType = form.consentFile.type || 'application/octet-stream';
+      if (editingId) {
+        updateSession(editingId, {
+          caseId: form.caseId,
+          date: form.date,
+          type: form.type,
+          description: form.description,
+          intervention: form.intervention,
+          ahaMoment: form.ahaMoment,
+          result: form.result,
+          nextStep: form.nextStep,
+          nextContact: form.nextContact,
+          recordingLink: form.recordingLink,
+          transcript: form.transcript,
+          contentIdea: form.contentIdea,
+          contentAngle: form.contentAngle,
+          contentStatus: form.contentStatus,
+        });
+      } else {
+        createSession({
+          caseId: form.caseId,
+          date: form.date,
+          type: form.type,
+          description: form.description,
+          intervention: form.intervention,
+          ahaMoment: form.ahaMoment,
+          result: form.result,
+          nextStep: form.nextStep,
+          nextContact: form.nextContact,
+          recordingLink: form.recordingLink,
+          transcript: form.transcript,
+          consentGiven: true,
+          contentIdea: form.contentIdea,
+          contentAngle: form.contentAngle,
+          contentStatus: form.contentStatus,
+        });
       }
-      createSession({
-        caseId: form.caseId,
-        date: form.date,
-        type: form.type,
-        description: form.description,
-        intervention: form.intervention,
-        ahaMoment: form.ahaMoment,
-        result: form.result,
-        nextStep: form.nextStep,
-        nextContact: form.nextContact,
-        recordingLink: form.recordingLink,
-        transcript: form.transcript,
-        consentGiven: true,
-        contentIdea: form.contentIdea,
-        consentFileId,
-        consentFileName,
-        consentFileType,
-      });
       setOpen(false);
     } catch (e) {
       setError(e.message ?? 'Speichern fehlgeschlagen.');
-    } finally {
-      setBusy(false);
     }
   };
 
@@ -183,30 +209,11 @@ export default function Sessions() {
             {
               key: 'consent',
               label: 'Einverständnis',
-              width: 180,
-              render: (s) => (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span className="pill pill-success">
-                    <ShieldCheck size={11} strokeWidth={2} /> bestätigt
-                  </span>
-                  {s.consentFileId && (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        downloadFile(s.consentFileId);
-                      }}
-                      title={s.consentFileName || 'Datei herunterladen'}
-                      style={{
-                        color: 'var(--muted)',
-                        display: 'grid',
-                        placeItems: 'center',
-                      }}
-                    >
-                      <Download size={13} strokeWidth={1.75} />
-                    </button>
-                  )}
-                </div>
+              width: 140,
+              render: () => (
+                <span className="pill pill-success">
+                  <ShieldCheck size={11} strokeWidth={2} /> bestätigt
+                </span>
               ),
             },
             {
@@ -229,6 +236,7 @@ export default function Sessions() {
             },
           ]}
           rows={rows}
+          onRowClick={startEdit}
           empty={
             <EmptyState
               icon={CalendarDays}
@@ -247,15 +255,15 @@ export default function Sessions() {
       <Modal
         open={open}
         onClose={() => setOpen(false)}
-        title="Neue Session"
+        title={editingId ? 'Session bearbeiten' : 'Neue Session'}
         width={760}
         footer={
           <>
             <button className="btn-ghost" onClick={() => setOpen(false)}>
               Abbrechen
             </button>
-            <button className="btn-primary" onClick={save} disabled={busy}>
-              {busy ? 'Speichere…' : 'Speichern'}
+            <button className="btn-primary" onClick={save}>
+              Speichern
             </button>
           </>
         }
@@ -438,9 +446,6 @@ export default function Sessions() {
               border: `1px solid ${
                 form.consentGiven ? 'rgba(74,222,128,0.3)' : 'rgba(238,76,39,0.3)'
               }`,
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 12,
             }}
           >
             <label
@@ -480,11 +485,6 @@ export default function Sessions() {
                 </span>
               </span>
             </label>
-
-            <ConsentFileUpload
-              file={form.consentFile}
-              onChange={(file) => set('consentFile')(file)}
-            />
           </div>
 
           {error && (
@@ -507,60 +507,6 @@ export default function Sessions() {
           )}
         </div>
       </Modal>
-    </div>
-  );
-}
-
-function ConsentFileUpload({ file, onChange }) {
-  return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 10,
-        paddingTop: 8,
-        borderTop: '1px solid rgba(255,255,255,0.05)',
-      }}
-    >
-      <label
-        className="btn-ghost"
-        style={{ cursor: 'pointer', fontSize: 12.5 }}
-      >
-        <Upload size={14} strokeWidth={1.75} />
-        {file ? 'Andere Datei wählen' : 'Einverständnis-Datei hochladen'}
-        <input
-          type="file"
-          onChange={(e) => onChange(e.target.files?.[0] || null)}
-          style={{ display: 'none' }}
-        />
-      </label>
-      {file ? (
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-            fontSize: 12.5,
-            color: 'var(--text)',
-          }}
-        >
-          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 280 }}>
-            {file.name}
-          </span>
-          <button
-            type="button"
-            onClick={() => onChange(null)}
-            aria-label="Datei entfernen"
-            style={{ color: 'var(--muted)' }}
-          >
-            <X size={13} strokeWidth={2} />
-          </button>
-        </div>
-      ) : (
-        <span style={{ fontSize: 11.5, color: 'var(--muted)' }}>
-          Beliebiges Format. Lokal abgelegt, nicht öffentlich.
-        </span>
-      )}
     </div>
   );
 }

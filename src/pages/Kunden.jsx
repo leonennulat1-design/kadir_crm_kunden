@@ -9,9 +9,10 @@ import Field from '../components/forms/Field.jsx';
 import ComboBox from '../components/forms/ComboBox.jsx';
 
 export default function Kunden() {
-  const { state, createCustomer, deleteCustomer } = useStore();
+  const { state, createCustomer, updateCustomer, deleteCustomer } = useStore();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
+  const [editingId, setEditingId] = useState(null);
   const [source, setSource] = useState('');
 
   const counts = useMemo(() => {
@@ -28,10 +29,35 @@ export default function Kunden() {
 
   const rows = [...state.customers].sort((a, b) => b.number.localeCompare(a.number));
 
+  const startCreate = () => {
+    setEditingId(null);
+    setSource('');
+    setOpen(true);
+  };
+
+  const startEdit = (c) => {
+    setEditingId(c.id);
+    setSource(c.source ?? '');
+    setOpen(true);
+  };
+
+  const save = () => {
+    if (editingId) updateCustomer(editingId, { source });
+    else createCustomer({ source });
+    setOpen(false);
+    setSource('');
+  };
+
+  const close = () => {
+    setOpen(false);
+    setSource('');
+    setEditingId(null);
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-        <button className="btn-primary" onClick={() => setOpen(true)}>
+        <button className="btn-primary" onClick={startCreate}>
           <Plus size={16} strokeWidth={2} /> Neuer Kunde
         </button>
       </div>
@@ -43,8 +69,28 @@ export default function Kunden() {
           {
             key: 'cases',
             label: 'Fälle',
-            width: 90,
-            render: (r) => counts.cases.get(r.id) ?? 0,
+            width: 100,
+            render: (r) => {
+              const n = counts.cases.get(r.id) ?? 0;
+              if (!n) return <span style={{ color: 'var(--muted)' }}>0</span>;
+              return (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    navigate(`/faelle?kunde=${r.id}`);
+                  }}
+                  style={{
+                    color: 'var(--orange)',
+                    fontFamily: 'var(--font-heading)',
+                    fontWeight: 600,
+                  }}
+                  title="Fälle dieses Kunden anzeigen"
+                >
+                  {n} ansehen
+                </button>
+              );
+            },
           },
           {
             key: 'revenue',
@@ -75,14 +121,14 @@ export default function Kunden() {
           },
         ]}
         rows={rows}
-        onRowClick={(r) => navigate(`/faelle?kunde=${r.id}`)}
+        onRowClick={startEdit}
         empty={
           <EmptyState
             icon={Users}
             title="Noch keine Kunden"
             description="Lege deinen ersten zahlenden Kunden an. Geführt nur über die Kundennummer."
             action={
-              <button className="btn-primary" onClick={() => setOpen(true)}>
+              <button className="btn-primary" onClick={startCreate}>
                 <Plus size={16} strokeWidth={2} /> Ersten Kunden anlegen
               </button>
             }
@@ -92,49 +138,35 @@ export default function Kunden() {
 
       <Modal
         open={open}
-        onClose={() => {
-          setOpen(false);
-          setSource('');
-        }}
-        title="Neuer Kunde"
+        onClose={close}
+        title={editingId ? 'Kunde bearbeiten' : 'Neuer Kunde'}
         footer={
           <>
-            <button
-              className="btn-ghost"
-              onClick={() => {
-                setOpen(false);
-                setSource('');
-              }}
-            >
+            <button className="btn-ghost" onClick={close}>
               Abbrechen
             </button>
-            <button
-              className="btn-primary"
-              onClick={() => {
-                createCustomer({ source });
-                setOpen(false);
-                setSource('');
-              }}
-            >
-              Anlegen
+            <button className="btn-primary" onClick={save}>
+              Speichern
             </button>
           </>
         }
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div
-            style={{
-              padding: 12,
-              borderRadius: 10,
-              background: 'rgba(255,155,38,0.08)',
-              border: '1px solid rgba(255,155,38,0.2)',
-              fontSize: 12.5,
-              color: 'var(--text)',
-            }}
-          >
-            Die Kundennummer wird automatisch vergeben (K001, K002, …). Es werden keine
-            Klarnamen, E-Mails oder Telefonnummern gespeichert.
-          </div>
+          {!editingId && (
+            <div
+              style={{
+                padding: 12,
+                borderRadius: 10,
+                background: 'rgba(255,155,38,0.08)',
+                border: '1px solid rgba(255,155,38,0.2)',
+                fontSize: 12.5,
+                color: 'var(--text)',
+              }}
+            >
+              Die Kundennummer wird automatisch vergeben (K001, K002, …). Es werden keine
+              Klarnamen, E-Mails oder Telefonnummern gespeichert.
+            </div>
+          )}
           <Field label="Herkunft" hint="Auswählen oder neuen Wert eintippen.">
             <ComboBox
               value={source}

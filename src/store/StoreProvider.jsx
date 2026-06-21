@@ -1,9 +1,8 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { uid, formatNumber, nextNumber } from '../lib/ids.js';
-import { deleteFile } from '../lib/files.js';
 
 const STORAGE_KEY = 'kadir-crm';
-const CURRENT_VERSION = 2;
+const CURRENT_VERSION = 3;
 
 const INITIAL_STATE = {
   version: CURRENT_VERSION,
@@ -53,6 +52,13 @@ function migrate(raw) {
   for (const k of ['customers', 'cases', 'sessions', 'patterns', 'revenue', 'feedback']) {
     if (!Array.isArray(data[k])) data[k] = [];
   }
+
+  // v3: Einverständnis-Datei-Felder aus Sessions entfernen
+  data.sessions = data.sessions.map((s) => {
+    const { consentFileId, consentFileName, consentFileType, ...rest } = s;
+    return rest;
+  });
+
   data.version = CURRENT_VERSION;
   return data;
 }
@@ -116,12 +122,6 @@ export function StoreProvider({ children }) {
       deleteCustomer(id) {
         setState((s) => {
           const removedCaseIds = s.cases.filter((c) => c.customerId === id).map((c) => c.id);
-          const removedSessions = s.sessions.filter((sess) =>
-            removedCaseIds.includes(sess.caseId)
-          );
-          removedSessions.forEach((sess) => {
-            if (sess.consentFileId) deleteFile(sess.consentFileId).catch(() => {});
-          });
           return {
             ...s,
             customers: s.customers.filter((c) => c.id !== id),
@@ -176,17 +176,11 @@ export function StoreProvider({ children }) {
       },
 
       deleteCase(id) {
-        setState((s) => {
-          const removed = s.sessions.filter((sess) => sess.caseId === id);
-          removed.forEach((sess) => {
-            if (sess.consentFileId) deleteFile(sess.consentFileId).catch(() => {});
-          });
-          return {
-            ...s,
-            cases: s.cases.filter((c) => c.id !== id),
-            sessions: s.sessions.filter((sess) => sess.caseId !== id),
-          };
-        });
+        setState((s) => ({
+          ...s,
+          cases: s.cases.filter((c) => c.id !== id),
+          sessions: s.sessions.filter((sess) => sess.caseId !== id),
+        }));
       },
 
       createSession(payload) {
@@ -212,9 +206,6 @@ export function StoreProvider({ children }) {
               recordingLink: payload.recordingLink ?? '',
               transcript: payload.transcript ?? '',
               consentGiven: true,
-              consentFileId: payload.consentFileId ?? '',
-              consentFileName: payload.consentFileName ?? '',
-              consentFileType: payload.consentFileType ?? '',
               contentIdea: payload.contentIdea ?? '',
               contentAngle: payload.contentAngle ?? '',
               contentStatus: payload.contentStatus ?? 'Idee',
@@ -225,6 +216,9 @@ export function StoreProvider({ children }) {
       },
 
       updateSession(id, patch) {
+        if (patch.consentGiven === false) {
+          throw new Error('Einverständnis darf nicht entfernt werden.');
+        }
         setState((s) => ({
           ...s,
           sessions: s.sessions.map((x) => (x.id === id ? { ...x, ...patch } : x)),
@@ -232,11 +226,7 @@ export function StoreProvider({ children }) {
       },
 
       deleteSession(id) {
-        setState((s) => {
-          const sess = s.sessions.find((x) => x.id === id);
-          if (sess?.consentFileId) deleteFile(sess.consentFileId).catch(() => {});
-          return { ...s, sessions: s.sessions.filter((x) => x.id !== id) };
-        });
+        setState((s) => ({ ...s, sessions: s.sessions.filter((x) => x.id !== id) }));
       },
 
       createPattern(payload) {

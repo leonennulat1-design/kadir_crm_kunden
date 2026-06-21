@@ -11,7 +11,8 @@ const PAGE_META = {
   '/content': { title: 'Content', subtitle: 'Ideen aus deinen Sessions, sortiert und bewertbar' },
   '/umsatz': { title: 'Umsatz', subtitle: 'Erlöse nach Stufe' },
   '/auswertung': { title: 'Auswertung', subtitle: 'Kennzahlen und Export für externe KI-Analyse' },
-  '/einstellungen': { title: 'Einstellungen', subtitle: 'Workspace und Feedback' },
+  '/feedback': { title: 'Feedback', subtitle: 'Notizen zur App, lokal gespeichert' },
+  '/einstellungen': { title: 'Einstellungen', subtitle: 'Datenschutz und Backup' },
 };
 
 export default function Layout() {
