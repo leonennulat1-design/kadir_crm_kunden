@@ -79,7 +79,6 @@ function buildMarkdown(state, usage) {
     lines.push(`- Ergebnis: ${s.result || '–'}`);
     lines.push(`- Nächster Schritt: ${s.nextStep || '–'}`);
     lines.push(`- Nächster Kontaktpunkt: ${s.nextContact || '–'}`);
-    lines.push(`- Aufnahme-Link: ${s.recordingLink || '–'}`);
     lines.push(`- Content-Idee: ${s.contentIdea || '–'}`);
     if (s.contentAngle) lines.push(`- Content-Winkel: ${s.contentAngle}`);
     if (s.contentStatus) lines.push(`- Content-Status: ${s.contentStatus}`);
@@ -134,6 +133,18 @@ export default function Auswertung() {
   }, [state.revenue]);
 
   const markdown = useMemo(() => buildMarkdown(state, usage), [state, usage]);
+
+  const PREVIEW_LINES = 200;
+  const preview = useMemo(() => {
+    const lines = markdown.split('\n');
+    if (lines.length <= PREVIEW_LINES) return { text: markdown, truncated: 0 };
+    return {
+      text:
+        lines.slice(0, PREVIEW_LINES).join('\n') +
+        `\n\n… ${lines.length - PREVIEW_LINES} weitere Zeilen — vollständig im Download.`,
+      truncated: lines.length - PREVIEW_LINES,
+    };
+  }, [markdown]);
 
   const copy = async () => {
     try {
@@ -294,7 +305,7 @@ export default function Auswertung() {
             margin: 0,
           }}
         >
-          {markdown}
+          {preview.text}
         </pre>
       </section>
     </div>

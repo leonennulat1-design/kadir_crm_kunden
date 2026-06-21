@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { uid, formatNumber, nextNumber } from '../lib/ids.js';
 
 const STORAGE_KEY = 'kadir-crm';
-const CURRENT_VERSION = 4;
+const CURRENT_VERSION = 5;
 
 export const SOURCE_OPTIONS = [
   'Netzwerk',
@@ -12,6 +12,7 @@ export const SOURCE_OPTIONS = [
 
 const INITIAL_STATE = {
   version: CURRENT_VERSION,
+  lastBackupAt: null,
   customers: [],
   cases: [],
   sessions: [],
@@ -72,10 +73,15 @@ function migrate(raw) {
   });
 
   // v3: Einverständnis-Datei-Felder aus Sessions entfernen
+  // v5: recordingLink aus Sessions entfernen (Feld nicht mehr genutzt)
   data.sessions = data.sessions.map((s) => {
-    const { consentFileId, consentFileName, consentFileType, ...rest } = s;
+    const { consentFileId, consentFileName, consentFileType, recordingLink, ...rest } = s;
     return rest;
   });
+
+  if (typeof data.lastBackupAt !== 'string' && data.lastBackupAt !== null) {
+    data.lastBackupAt = null;
+  }
 
   data.version = CURRENT_VERSION;
   return data;
@@ -243,7 +249,6 @@ export function StoreProvider({ children }) {
               result: payload.result ?? '',
               nextStep: payload.nextStep ?? '',
               nextContact: payload.nextContact ?? '',
-              recordingLink: payload.recordingLink ?? '',
               transcript: payload.transcript ?? '',
               consentGiven: true,
               contentIdea: payload.contentIdea ?? '',
@@ -328,6 +333,22 @@ export function StoreProvider({ children }) {
         return id;
       },
 
+      updateRevenue(id, patch) {
+        setState((s) => ({
+          ...s,
+          revenue: s.revenue.map((r) =>
+            r.id === id
+              ? {
+                  ...r,
+                  ...patch,
+                  amount:
+                    'amount' in patch ? Number(patch.amount) || 0 : r.amount,
+                }
+              : r
+          ),
+        }));
+      },
+
       deleteRevenue(id) {
         setState((s) => ({ ...s, revenue: s.revenue.filter((r) => r.id !== id) }));
       },
@@ -352,6 +373,26 @@ export function StoreProvider({ children }) {
 
       deleteFeedback(id) {
         setState((s) => ({ ...s, feedback: s.feedback.filter((f) => f.id !== id) }));
+      },
+
+      markBackupTaken() {
+        setState((s) => ({ ...s, lastBackupAt: new Date().toISOString() }));
+      },
+
+      importBackup(payload) {
+        let parsed = payload;
+        if (typeof payload === 'string') {
+          try {
+            parsed = JSON.parse(payload);
+          } catch (e) {
+            throw new Error('Datei ist kein gültiges JSON.');
+          }
+        }
+        if (!parsed || typeof parsed !== 'object') {
+          throw new Error('Datei enthält keine Backup-Struktur.');
+        }
+        const migrated = migrate(parsed);
+        setState(migrated);
       },
 
       addVocab,

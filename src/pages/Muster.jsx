@@ -5,8 +5,17 @@ import DataTable from '../components/DataTable.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import Modal from '../components/Modal.jsx';
 import Field from '../components/forms/Field.jsx';
+import { pickFields } from '../lib/forms.js';
 
 const STATUS_OPTIONS = ['Hypothese', 'Bestätigt'];
+
+const PATTERN_FIELDS = [
+  'name',
+  'description',
+  'typicalSymptoms',
+  'typicalIntervention',
+  'status',
+];
 
 function emptyForm() {
   return {
@@ -51,8 +60,9 @@ export default function Muster() {
 
   const save = () => {
     if (!form.name.trim()) return;
-    if (editingId) updatePattern(editingId, form);
-    else createPattern(form);
+    const patch = pickFields(form, PATTERN_FIELDS);
+    if (editingId) updatePattern(editingId, patch);
+    else createPattern(patch);
     setOpen(false);
   };
 

@@ -8,6 +8,20 @@ import Modal from '../components/Modal.jsx';
 import Field from '../components/forms/Field.jsx';
 import ComboBox from '../components/forms/ComboBox.jsx';
 import MultiComboBox from '../components/forms/MultiComboBox.jsx';
+import { pickFields } from '../lib/forms.js';
+
+const CASE_FIELDS = [
+  'customerId',
+  'relationshipType',
+  'symptom',
+  'trigger',
+  'conflictTopic',
+  'dynamic',
+  'protectionPattern',
+  'need',
+  'linkedPatterns',
+  'linkedTopics',
+];
 
 function emptyForm() {
   return {
@@ -82,8 +96,9 @@ export default function Faelle() {
     }
     setError('');
     try {
-      if (editingId) updateCase(editingId, form);
-      else createCase(form);
+      const patch = pickFields(form, CASE_FIELDS);
+      if (editingId) updateCase(editingId, patch);
+      else createCase(patch);
       setOpen(false);
     } catch (e) {
       setError(e.message ?? 'Speichern fehlgeschlagen.');
@@ -369,7 +384,7 @@ export default function Faelle() {
 
           <Field
             label="Verknüpfte Muster"
-            hint="Aus der Methoden-Bibliothek auswählen."
+            hint="Nur Muster aus der Methoden-Bibliothek wählbar. Tippfehler werden verworfen."
             style={{ gridColumn: 'span 2' }}
           >
             <MultiComboBox

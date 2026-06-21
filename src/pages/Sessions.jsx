@@ -10,10 +10,27 @@ import {
 import { useStore } from '../store/StoreProvider.jsx';
 import { SESSION_TYPES, formatDate } from '../lib/format.js';
 import { parseDescription, DESCRIPTION_LABELS } from '../lib/parseDescription.js';
+import { pickFields } from '../lib/forms.js';
 import DataTable from '../components/DataTable.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import Modal from '../components/Modal.jsx';
 import Field from '../components/forms/Field.jsx';
+
+const SESSION_FIELDS = [
+  'caseId',
+  'date',
+  'type',
+  'description',
+  'intervention',
+  'ahaMoment',
+  'result',
+  'nextStep',
+  'nextContact',
+  'transcript',
+  'contentIdea',
+  'contentAngle',
+  'contentStatus',
+];
 
 function emptyForm() {
   return {
@@ -26,12 +43,30 @@ function emptyForm() {
     result: '',
     nextStep: '',
     nextContact: '',
-    recordingLink: '',
     transcript: '',
-    consentGiven: false,
     contentIdea: '',
     contentAngle: '',
     contentStatus: 'Idee',
+    consentGiven: false,
+  };
+}
+
+function fromRow(s) {
+  return {
+    caseId: s.caseId ?? '',
+    date: s.date ?? '',
+    type: s.type || SESSION_TYPES[0].value,
+    description: s.description ?? '',
+    intervention: s.intervention ?? '',
+    ahaMoment: s.ahaMoment ?? '',
+    result: s.result ?? '',
+    nextStep: s.nextStep ?? '',
+    nextContact: s.nextContact ?? '',
+    transcript: s.transcript ?? '',
+    contentIdea: s.contentIdea ?? '',
+    contentAngle: s.contentAngle ?? '',
+    contentStatus: s.contentStatus || 'Idee',
+    consentGiven: s.consentGiven ?? false,
   };
 }
 
@@ -75,23 +110,7 @@ export default function Sessions() {
   const startEdit = (s) => {
     setEditingId(s.id);
     setError('');
-    setForm({
-      caseId: s.caseId,
-      date: s.date ?? '',
-      type: s.type || SESSION_TYPES[0].value,
-      description: s.description ?? '',
-      intervention: s.intervention ?? '',
-      ahaMoment: s.ahaMoment ?? '',
-      result: s.result ?? '',
-      nextStep: s.nextStep ?? '',
-      nextContact: s.nextContact ?? '',
-      recordingLink: s.recordingLink ?? '',
-      transcript: s.transcript ?? '',
-      consentGiven: s.consentGiven ?? false,
-      contentIdea: s.contentIdea ?? '',
-      contentAngle: s.contentAngle ?? '',
-      contentStatus: s.contentStatus || 'Idee',
-    });
+    setForm(fromRow(s));
     setOpen(true);
   };
 
@@ -116,41 +135,11 @@ export default function Sessions() {
       return setError('Ohne Einverständnis-Häkchen kann die Session nicht gespeichert werden.');
     setError('');
     try {
+      const patch = pickFields(form, SESSION_FIELDS);
       if (editingId) {
-        updateSession(editingId, {
-          caseId: form.caseId,
-          date: form.date,
-          type: form.type,
-          description: form.description,
-          intervention: form.intervention,
-          ahaMoment: form.ahaMoment,
-          result: form.result,
-          nextStep: form.nextStep,
-          nextContact: form.nextContact,
-          recordingLink: form.recordingLink,
-          transcript: form.transcript,
-          contentIdea: form.contentIdea,
-          contentAngle: form.contentAngle,
-          contentStatus: form.contentStatus,
-        });
+        updateSession(editingId, patch);
       } else {
-        createSession({
-          caseId: form.caseId,
-          date: form.date,
-          type: form.type,
-          description: form.description,
-          intervention: form.intervention,
-          ahaMoment: form.ahaMoment,
-          result: form.result,
-          nextStep: form.nextStep,
-          nextContact: form.nextContact,
-          recordingLink: form.recordingLink,
-          transcript: form.transcript,
-          consentGiven: true,
-          contentIdea: form.contentIdea,
-          contentAngle: form.contentAngle,
-          contentStatus: form.contentStatus,
-        });
+        createSession({ ...patch, consentGiven: true });
       }
       setOpen(false);
     } catch (e) {
@@ -400,16 +389,6 @@ export default function Sessions() {
               type="date"
               value={form.nextContact}
               onChange={(e) => set('nextContact')(e.target.value)}
-            />
-          </Field>
-
-          <Field label="Aufnahme-Link" style={{ gridColumn: 'span 2' }}>
-            <input
-              className="input"
-              type="url"
-              placeholder="https://…"
-              value={form.recordingLink}
-              onChange={(e) => set('recordingLink')(e.target.value)}
             />
           </Field>
 

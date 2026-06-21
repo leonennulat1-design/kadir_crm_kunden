@@ -2,10 +2,13 @@ import { useMemo, useState } from 'react';
 import { Euro, Plus, Trash2 } from 'lucide-react';
 import { useStore } from '../store/StoreProvider.jsx';
 import { REVENUE_STAGES, formatEur, formatDate, stageLabel } from '../lib/format.js';
+import { pickFields } from '../lib/forms.js';
 import DataTable from '../components/DataTable.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import Modal from '../components/Modal.jsx';
 import Field from '../components/forms/Field.jsx';
+
+const REVENUE_FIELDS = ['customerId', 'stage', 'amount', 'date'];
 
 function emptyForm() {
   return {
@@ -16,9 +19,19 @@ function emptyForm() {
   };
 }
 
+function fromRow(r) {
+  return {
+    customerId: r.customerId ?? '',
+    stage: r.stage || REVENUE_STAGES[0].value,
+    amount: r.amount?.toString() ?? '',
+    date: r.date ?? '',
+  };
+}
+
 export default function Umsatz() {
-  const { state, createRevenue, deleteRevenue } = useStore();
+  const { state, createRevenue, updateRevenue, deleteRevenue } = useStore();
   const [open, setOpen] = useState(false);
+  const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(emptyForm);
   const [filter, setFilter] = useState('all');
 
@@ -45,14 +58,30 @@ export default function Umsatz() {
   }, [state.revenue, filter]);
 
   const startCreate = () => {
+    setEditingId(null);
     setForm(emptyForm());
     setOpen(true);
   };
 
-  const save = () => {
-    if (!form.customerId || !form.amount) return;
-    createRevenue(form);
+  const startEdit = (r) => {
+    setEditingId(r.id);
+    setForm(fromRow(r));
+    setOpen(true);
+  };
+
+  const close = () => {
     setOpen(false);
+    setEditingId(null);
+  };
+
+  const canSave = !!form.customerId && form.amount !== '';
+
+  const save = () => {
+    if (!canSave) return;
+    const patch = pickFields(form, REVENUE_FIELDS);
+    if (editingId) updateRevenue(editingId, patch);
+    else createRevenue(patch);
+    close();
   };
 
   const set = (k) => (v) => setForm((f) => ({ ...f, [k]: v }));
@@ -148,6 +177,7 @@ export default function Umsatz() {
           },
         ]}
         rows={rows}
+        onRowClick={startEdit}
         empty={
           !state.customers.length ? (
             <EmptyState
@@ -172,18 +202,14 @@ export default function Umsatz() {
 
       <Modal
         open={open}
-        onClose={() => setOpen(false)}
-        title="Neuer Umsatz"
+        onClose={close}
+        title={editingId ? 'Umsatz bearbeiten' : 'Neuer Umsatz'}
         footer={
           <>
-            <button className="btn-ghost" onClick={() => setOpen(false)}>
+            <button className="btn-ghost" onClick={close}>
               Abbrechen
             </button>
-            <button
-              className="btn-primary"
-              onClick={save}
-              disabled={!form.customerId || !form.amount}
-            >
+            <button className="btn-primary" onClick={save} disabled={!canSave}>
               Speichern
             </button>
           </>
@@ -220,11 +246,10 @@ export default function Umsatz() {
             </select>
           </Field>
 
-          <Field label="Betrag (EUR)" required>
+          <Field label="Betrag (EUR)" required hint="0 ist erlaubt (z. B. Storno).">
             <input
               className="input"
               type="number"
-              min="0"
               step="1"
               value={form.amount}
               onChange={(e) => set('amount')(e.target.value)}
