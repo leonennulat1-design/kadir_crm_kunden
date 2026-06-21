@@ -281,6 +281,25 @@ a {
   box-shadow: 0 10px 24px rgba(238, 76, 39, 0.38);
 }
 
+.btn-danger {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: linear-gradient(135deg, #e0463f, #a52a1f);
+  color: #fff;
+  font-weight: 600;
+  font-size: 13.5px;
+  padding: 10px 16px;
+  border-radius: 10px;
+  box-shadow: 0 6px 18px rgba(165, 42, 31, 0.32);
+  transition: transform 180ms ease, box-shadow 180ms ease;
+}
+
+.btn-danger:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 24px rgba(165, 42, 31, 0.45);
+}
+
 .btn-ghost {
   display: inline-flex;
   align-items: center;

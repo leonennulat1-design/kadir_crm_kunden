@@ -8,7 +8,8 @@ import Modal from '../components/Modal.jsx';
 import Field from '../components/forms/Field.jsx';
 import ComboBox from '../components/forms/ComboBox.jsx';
 import MultiComboBox from '../components/forms/MultiComboBox.jsx';
-import { pickFields } from '../lib/forms.js';
+import { pickFields, pluralize } from '../lib/forms.js';
+import { useConfirm } from '../components/ConfirmProvider.jsx';
 
 const CASE_FIELDS = [
   'customerId',
@@ -40,6 +41,7 @@ function emptyForm() {
 
 export default function Faelle() {
   const { state, createCase, updateCase, deleteCase } = useStore();
+  const confirm = useConfirm();
   const [params, setParams] = useSearchParams();
   const filterCustomerId = params.get('kunde') || '';
 
@@ -213,16 +215,20 @@ export default function Faelle() {
               render: (c) => (
                 <button
                   type="button"
-                  onClick={(e) => {
+                  onClick={async (e) => {
                     e.stopPropagation();
                     const sessionCount = state.sessions.filter(
                       (s) => s.caseId === c.id
                     ).length;
-                    let msg = `Fall ${c.number} wirklich löschen?`;
-                    if (sessionCount) {
-                      msg += `\n\n${sessionCount === 1 ? '1 Session' : `${sessionCount} Sessions`} werden ebenfalls gelöscht.`;
-                    }
-                    if (confirm(msg)) deleteCase(c.id);
+                    const ok = await confirm({
+                      title: `Fall ${c.number} löschen?`,
+                      body: sessionCount
+                        ? `${pluralize(sessionCount, 'Session', 'Sessions')} werden ebenfalls gelöscht.`
+                        : '',
+                      confirmLabel: 'Löschen',
+                      danger: true,
+                    });
+                    if (ok) deleteCase(c.id);
                   }}
                   aria-label="Löschen"
                   style={{ color: 'var(--muted)', padding: 4 }}

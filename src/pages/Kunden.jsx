@@ -2,17 +2,16 @@ import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Users, Plus, Trash2 } from 'lucide-react';
 import { useStore, SOURCE_OPTIONS } from '../store/StoreProvider.jsx';
+import { pluralize } from '../lib/forms.js';
 import DataTable from '../components/DataTable.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import Modal from '../components/Modal.jsx';
 import Field from '../components/forms/Field.jsx';
-
-function pluralize(n, sg, pl) {
-  return `${n} ${n === 1 ? sg : pl}`;
-}
+import { useConfirm } from '../components/ConfirmProvider.jsx';
 
 export default function Kunden() {
   const { state, createCustomer, updateCustomer, deleteCustomer } = useStore();
+  const confirm = useConfirm();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -57,13 +56,12 @@ export default function Kunden() {
     setEditingId(null);
   };
 
-  const askDelete = (customer) => {
+  const askDelete = async (customer) => {
     const customerCases = state.cases.filter((c) => c.customerId === customer.id);
     const caseIds = new Set(customerCases.map((c) => c.id));
     const customerSessions = state.sessions.filter((s) => caseIds.has(s.caseId));
     const customerRevenue = state.revenue.filter((r) => r.customerId === customer.id);
 
-    let msg = `Kunde ${customer.number} wirklich löschen?`;
     const parts = [];
     if (customerCases.length) parts.push(pluralize(customerCases.length, 'Fall', 'Fälle'));
     if (customerSessions.length)
@@ -71,11 +69,15 @@ export default function Kunden() {
     if (customerRevenue.length)
       parts.push(pluralize(customerRevenue.length, 'Umsatzeintrag', 'Umsatzeinträge'));
 
-    if (parts.length) {
-      msg += `\n\nFolgende verknüpfte Datensätze werden ebenfalls gelöscht:\n• ${parts.join('\n• ')}`;
-    }
-
-    if (confirm(msg)) deleteCustomer(customer.id);
+    const ok = await confirm({
+      title: `Kunde ${customer.number} löschen?`,
+      body: parts.length
+        ? `Folgende verknüpfte Datensätze werden ebenfalls gelöscht:\n• ${parts.join('\n• ')}`
+        : '',
+      confirmLabel: 'Löschen',
+      danger: true,
+    });
+    if (ok) deleteCustomer(customer.id);
   };
 
   return (

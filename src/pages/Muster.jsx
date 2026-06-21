@@ -5,7 +5,8 @@ import DataTable from '../components/DataTable.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import Modal from '../components/Modal.jsx';
 import Field from '../components/forms/Field.jsx';
-import { pickFields } from '../lib/forms.js';
+import { pickFields, pluralize } from '../lib/forms.js';
+import { useConfirm } from '../components/ConfirmProvider.jsx';
 
 const STATUS_OPTIONS = ['Hypothese', 'Bestätigt'];
 
@@ -30,6 +31,7 @@ function emptyForm() {
 export default function Muster() {
   const { state, createPattern, updatePattern, deletePattern } = useStore();
   const usage = usePatternUsage();
+  const confirm = useConfirm();
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(emptyForm);
@@ -137,13 +139,17 @@ export default function Muster() {
             render: (p) => (
               <button
                 type="button"
-                onClick={(e) => {
+                onClick={async (e) => {
                   e.stopPropagation();
-                  let msg = `Muster "${p.name}" wirklich löschen?`;
-                  if (p.count) {
-                    msg += `\n\nDie Verknüpfung wird aus ${p.count === 1 ? '1 Fall' : `${p.count} Fällen`} entfernt.`;
-                  }
-                  if (confirm(msg)) deletePattern(p.id);
+                  const ok = await confirm({
+                    title: `Muster „${p.name}" löschen?`,
+                    body: p.count
+                      ? `Die Verknüpfung wird aus ${pluralize(p.count, 'Fall', 'Fällen')} entfernt.`
+                      : '',
+                    confirmLabel: 'Löschen',
+                    danger: true,
+                  });
+                  if (ok) deletePattern(p.id);
                 }}
                 aria-label="Löschen"
                 style={{ color: 'var(--muted)', padding: 4 }}

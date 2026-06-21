@@ -15,6 +15,7 @@ import DataTable from '../components/DataTable.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import Modal from '../components/Modal.jsx';
 import Field from '../components/forms/Field.jsx';
+import { useConfirm } from '../components/ConfirmProvider.jsx';
 
 const SESSION_FIELDS = [
   'caseId',
@@ -72,6 +73,7 @@ function fromRow(s) {
 
 export default function Sessions() {
   const { state, createSession, updateSession, deleteSession } = useStore();
+  const confirm = useConfirm();
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(emptyForm);
@@ -212,9 +214,14 @@ export default function Sessions() {
               render: (s) => (
                 <button
                   type="button"
-                  onClick={(e) => {
+                  onClick={async (e) => {
                     e.stopPropagation();
-                    if (confirm('Session löschen?')) deleteSession(s.id);
+                    const ok = await confirm({
+                      title: 'Session löschen?',
+                      confirmLabel: 'Löschen',
+                      danger: true,
+                    });
+                    if (ok) deleteSession(s.id);
                   }}
                   aria-label="Löschen"
                   style={{ color: 'var(--muted)', padding: 4 }}

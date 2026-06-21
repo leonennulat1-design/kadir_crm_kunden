@@ -2,6 +2,7 @@ import { MessageSquare, Trash2 } from 'lucide-react';
 import { useStore } from '../store/StoreProvider.jsx';
 import DataTable from '../components/DataTable.jsx';
 import EmptyState from '../components/EmptyState.jsx';
+import { useConfirm } from '../components/ConfirmProvider.jsx';
 
 const TS = new Intl.DateTimeFormat('de-DE', {
   day: '2-digit',
@@ -13,6 +14,7 @@ const TS = new Intl.DateTimeFormat('de-DE', {
 
 export default function Feedback() {
   const { state, deleteFeedback } = useStore();
+  const confirm = useConfirm();
 
   const rows = [...state.feedback].sort((a, b) =>
     (b.createdAt || '').localeCompare(a.createdAt || '')
@@ -86,9 +88,14 @@ export default function Feedback() {
             render: (f) => (
               <button
                 type="button"
-                onClick={(e) => {
+                onClick={async (e) => {
                   e.stopPropagation();
-                  if (confirm('Eintrag löschen?')) deleteFeedback(f.id);
+                  const ok = await confirm({
+                    title: 'Feedback-Eintrag löschen?',
+                    confirmLabel: 'Löschen',
+                    danger: true,
+                  });
+                  if (ok) deleteFeedback(f.id);
                 }}
                 aria-label="Löschen"
                 style={{ color: 'var(--muted)', padding: 4 }}

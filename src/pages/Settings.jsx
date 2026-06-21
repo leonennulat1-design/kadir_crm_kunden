@@ -9,6 +9,7 @@ import {
   Clock,
 } from 'lucide-react';
 import { useStore } from '../store/StoreProvider.jsx';
+import { useConfirm } from '../components/ConfirmProvider.jsx';
 
 const BACKUP_REMINDER_DAYS = 14;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -21,6 +22,7 @@ const DATE_FMT = new Intl.DateTimeFormat('de-DE', {
 
 export default function Settings() {
   const { state, importBackup, markBackupTaken } = useStore();
+  const confirm = useConfirm();
   const [importError, setImportError] = useState('');
   const [importSuccess, setImportSuccess] = useState('');
   const fileInputRef = useRef(null);
@@ -65,9 +67,15 @@ export default function Settings() {
         (parsed.customers?.length ?? 0) +
         (parsed.cases?.length ?? 0) +
         (parsed.sessions?.length ?? 0);
-      const ok = confirm(
-        `Backup einspielen?\n\nDie aktuelle Datenbank wird komplett überschrieben.\n\nNeue Daten: ${parsed.customers?.length ?? 0} Kunden, ${parsed.cases?.length ?? 0} Fälle, ${parsed.sessions?.length ?? 0} Sessions${itemCount === 0 ? '\n\nAchtung: Die Backup-Datei scheint leer zu sein.' : ''}`
-      );
+      const body =
+        `Die aktuelle Datenbank wird komplett überschrieben.\n\nNeue Daten: ${parsed.customers?.length ?? 0} Kunden, ${parsed.cases?.length ?? 0} Fälle, ${parsed.sessions?.length ?? 0} Sessions.` +
+        (itemCount === 0 ? '\n\nAchtung: Die Backup-Datei scheint leer zu sein.' : '');
+      const ok = await confirm({
+        title: 'Backup einspielen?',
+        body,
+        confirmLabel: 'Einspielen',
+        danger: true,
+      });
       if (!ok) return;
       importBackup(parsed);
       setImportSuccess('Backup erfolgreich eingespielt.');

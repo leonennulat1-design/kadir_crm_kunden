@@ -7,6 +7,7 @@ import DataTable from '../components/DataTable.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import Modal from '../components/Modal.jsx';
 import Field from '../components/forms/Field.jsx';
+import { useConfirm } from '../components/ConfirmProvider.jsx';
 
 const REVENUE_FIELDS = ['customerId', 'stage', 'amount', 'date'];
 
@@ -30,6 +31,7 @@ function fromRow(r) {
 
 export default function Umsatz() {
   const { state, createRevenue, updateRevenue, deleteRevenue } = useStore();
+  const confirm = useConfirm();
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(emptyForm);
@@ -164,9 +166,14 @@ export default function Umsatz() {
             render: (r) => (
               <button
                 type="button"
-                onClick={(e) => {
+                onClick={async (e) => {
                   e.stopPropagation();
-                  if (confirm('Umsatzeintrag löschen?')) deleteRevenue(r.id);
+                  const ok = await confirm({
+                    title: 'Umsatzeintrag löschen?',
+                    confirmLabel: 'Löschen',
+                    danger: true,
+                  });
+                  if (ok) deleteRevenue(r.id);
                 }}
                 aria-label="Löschen"
                 style={{ color: 'var(--muted)', padding: 4 }}
