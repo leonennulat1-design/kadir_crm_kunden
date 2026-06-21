@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { FolderOpen, Plus, Trash2, AlertCircle } from 'lucide-react';
+import { FolderOpen, Plus, Trash2, AlertCircle, Wand2 } from 'lucide-react';
 import { useStore } from '../store/StoreProvider.jsx';
 import DataTable from '../components/DataTable.jsx';
 import EmptyState from '../components/EmptyState.jsx';
@@ -9,10 +9,15 @@ import Field from '../components/forms/Field.jsx';
 import ComboBox from '../components/forms/ComboBox.jsx';
 import MultiComboBox from '../components/forms/MultiComboBox.jsx';
 import { pickFields, pluralize } from '../lib/forms.js';
+import {
+  parseCaseDescription,
+  CASE_DESCRIPTION_LABELS,
+} from '../lib/parseDescription.js';
 import { useConfirm } from '../components/ConfirmProvider.jsx';
 
 const CASE_FIELDS = [
   'customerId',
+  'description',
   'relationshipType',
   'symptom',
   'trigger',
@@ -27,6 +32,7 @@ const CASE_FIELDS = [
 function emptyForm() {
   return {
     customerId: '',
+    description: '',
     relationshipType: '',
     symptom: '',
     trigger: '',
@@ -78,6 +84,7 @@ export default function Faelle() {
     setError('');
     setForm({
       customerId: c.customerId,
+      description: c.description ?? '',
       relationshipType: c.relationshipType,
       symptom: c.symptom,
       trigger: c.trigger,
@@ -108,6 +115,32 @@ export default function Faelle() {
   };
 
   const set = (k) => (v) => setForm((f) => ({ ...f, [k]: v }));
+
+  const applyDescriptionParse = () => {
+    const parsed = parseCaseDescription(form.description);
+    setForm((f) => {
+      const newTopics = parsed.linkedTopics.length
+        ? [
+            ...f.linkedTopics,
+            ...parsed.linkedTopics.filter(
+              (t) => !f.linkedTopics.some((x) => x.toLowerCase() === t.toLowerCase())
+            ),
+          ]
+        : f.linkedTopics;
+      return {
+        ...f,
+        description: parsed.description ?? '',
+        relationshipType: parsed.relationshipType || f.relationshipType,
+        symptom: parsed.symptom || f.symptom,
+        trigger: parsed.trigger || f.trigger,
+        conflictTopic: parsed.conflictTopic || f.conflictTopic,
+        dynamic: parsed.dynamic || f.dynamic,
+        protectionPattern: parsed.protectionPattern || f.protectionPattern,
+        need: parsed.need || f.need,
+        linkedTopics: newTopics,
+      };
+    });
+  };
 
   const linkedPatternNames = form.linkedPatterns.map((id) => patternByName[id]).filter(Boolean);
 
@@ -296,6 +329,47 @@ export default function Faelle() {
               <span>{error}</span>
             </div>
           )}
+
+          <Field
+            label="Beschreibung"
+            hint="Bitte anonymisiert einfügen, keine Klarnamen."
+            style={{ gridColumn: 'span 2' }}
+          >
+            <textarea
+              className="input"
+              rows={6}
+              placeholder="Vorstrukturierten Fließtext hier einfügen. Mit den Labels unten kannst du den Inhalt automatisch in die Felder verteilen."
+              value={form.description}
+              onChange={(e) => set('description')(e.target.value)}
+            />
+            <div
+              style={{
+                marginTop: 8,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
+                flexWrap: 'wrap',
+              }}
+            >
+              <button
+                type="button"
+                className="btn-ghost"
+                onClick={applyDescriptionParse}
+                disabled={!form.description.trim()}
+                style={{
+                  opacity: form.description.trim() ? 1 : 0.5,
+                  cursor: form.description.trim() ? 'pointer' : 'not-allowed',
+                  fontSize: 12.5,
+                }}
+              >
+                <Wand2 size={14} strokeWidth={1.75} /> Felder aus Beschreibung füllen
+              </button>
+              <span style={{ fontSize: 11.5, color: 'var(--muted)' }}>
+                Erkannte Labels:{' '}
+                {CASE_DESCRIPTION_LABELS.map((l) => l.label).join('  ·  ')}
+              </span>
+            </div>
+          </Field>
 
           <Field label="Kunde" required style={{ gridColumn: 'span 2' }}>
             <select

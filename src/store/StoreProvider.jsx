@@ -190,6 +190,7 @@ export function StoreProvider({ children }) {
                 id,
                 number,
                 customerId: payload.customerId,
+                description: payload.description ?? '',
                 relationshipType: payload.relationshipType ?? '',
                 symptom: payload.symptom ?? '',
                 trigger: payload.trigger ?? '',

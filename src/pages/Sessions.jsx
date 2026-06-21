@@ -439,12 +439,13 @@ export default function Sessions() {
                 display: 'flex',
                 gap: 12,
                 alignItems: 'flex-start',
-                cursor: 'pointer',
+                cursor: editingId ? 'default' : 'pointer',
               }}
             >
               <input
                 type="checkbox"
                 checked={form.consentGiven}
+                disabled={!!editingId}
                 onChange={(e) => {
                   set('consentGiven')(e.target.checked);
                   if (e.target.checked) setError('');
@@ -454,6 +455,7 @@ export default function Sessions() {
                   width: 18,
                   height: 18,
                   accentColor: '#ff9b26',
+                  cursor: editingId ? 'default' : 'pointer',
                 }}
               />
               <span style={{ fontSize: 13.5 }}>
@@ -465,9 +467,24 @@ export default function Sessions() {
                   }}
                 >
                   Einverständnis liegt vor *
+                  {editingId && (
+                    <span
+                      style={{
+                        marginLeft: 8,
+                        fontFamily: 'var(--font-body)',
+                        fontWeight: 400,
+                        fontSize: 12,
+                        color: 'var(--muted)',
+                      }}
+                    >
+                      (gespeichert, nicht änderbar)
+                    </span>
+                  )}
                 </strong>
                 <span style={{ color: 'var(--muted)' }}>
-                  Pflichtfeld. Ohne explizite Bestätigung kann diese Session nicht gespeichert werden.
+                  {editingId
+                    ? 'Eine gespeicherte Session hat das Einverständnis immer bestätigt.'
+                    : 'Pflichtfeld. Ohne explizite Bestätigung kann diese Session nicht gespeichert werden.'}
                 </span>
               </span>
             </label>
