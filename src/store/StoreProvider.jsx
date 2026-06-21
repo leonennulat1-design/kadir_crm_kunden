@@ -13,7 +13,7 @@ const INITIAL_STATE = {
   revenue: [],
   feedback: [],
   vocab: {
-    sources: ['Netzwerk', 'Social Media'],
+    sources: ['Netzwerk', 'Social Media', 'Bestandskunde: Hund-Mensch-Coaching'],
     relationships: [
       'Partnerschaft',
       'Familie',
@@ -48,6 +48,12 @@ function migrate(raw) {
   const stripSonstiges = (list) => list.filter((v) => v.toLowerCase() !== 'sonstiges');
   data.vocab.sources = stripSonstiges(data.vocab.sources);
   data.vocab.relationships = stripSonstiges(data.vocab.relationships);
+
+  // Fehlende Default-Werte für Herkunft ergänzen, Eigeneinträge bleiben erhalten
+  const lowerSources = new Set(data.vocab.sources.map((v) => v.toLowerCase()));
+  for (const def of INITIAL_STATE.vocab.sources) {
+    if (!lowerSources.has(def.toLowerCase())) data.vocab.sources.push(def);
+  }
 
   for (const k of ['customers', 'cases', 'sessions', 'patterns', 'revenue', 'feedback']) {
     if (!Array.isArray(data[k])) data[k] = [];
