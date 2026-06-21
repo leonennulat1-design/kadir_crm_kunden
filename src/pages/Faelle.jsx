@@ -377,6 +377,7 @@ export default function Faelle() {
               onChange={togglePattern}
               options={state.patterns.map((p) => p.name)}
               placeholder="Muster auswählen…"
+              strict
             />
             {!state.patterns.length && (
               <span style={{ fontSize: 11.5, color: 'var(--muted)', marginTop: 4 }}>

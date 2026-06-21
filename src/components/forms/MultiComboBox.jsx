@@ -6,6 +6,7 @@ export default function MultiComboBox({
   onChange,
   options = [],
   placeholder = 'Eintippen, Enter zum Hinzufügen',
+  strict = false,
 }) {
   const [input, setInput] = useState('');
   const [open, setOpen] = useState(false);
@@ -32,6 +33,13 @@ export default function MultiComboBox({
       focusInput();
       return;
     }
+    if (strict && !options.some((o) => o.toLowerCase() === v.toLowerCase())) {
+      // Unbekannter Wert wird im strict-Mode verworfen, damit kein stiller
+      // Datenverlust entsteht (z.B. Tippfehler beim Muster-Namen).
+      setInput('');
+      focusInput();
+      return;
+    }
     onChange([...values, v]);
     setInput('');
     focusInput();
@@ -47,6 +55,7 @@ export default function MultiComboBox({
   );
 
   const canAddCustom =
+    !strict &&
     input.trim() &&
     !options.some((o) => o.toLowerCase() === lower) &&
     !values.some((v) => v.toLowerCase() === lower);

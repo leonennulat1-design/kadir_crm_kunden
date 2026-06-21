@@ -95,11 +95,23 @@ const StoreContext = createContext(null);
 
 export function StoreProvider({ children }) {
   const [state, setState] = useState(load);
+  const [saveError, setSaveError] = useState(null);
 
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    } catch {}
+      setSaveError((curr) => (curr === null ? curr : null));
+    } catch (e) {
+      const isQuota =
+        e?.name === 'QuotaExceededError' ||
+        e?.code === 22 ||
+        e?.code === 1014;
+      const msg = isQuota
+        ? 'Speicher voll. Lade ein Backup herunter und lösche alte Datensätze, sonst gehen Änderungen beim Refresh verloren.'
+        : `Speichern fehlgeschlagen: ${e?.message || 'unbekannter Fehler'}. Änderungen können beim Refresh verloren gehen.`;
+      console.error('[CRM] LocalStorage-Schreibfehler:', e);
+      setSaveError((curr) => (curr === msg ? curr : msg));
+    }
   }, [state]);
 
   const api = useMemo(() => {
@@ -118,6 +130,8 @@ export function StoreProvider({ children }) {
 
     return {
       state,
+      saveError,
+      clearSaveError: () => setSaveError(null),
 
       createCustomer({ source }) {
         const id = uid();
@@ -342,7 +356,7 @@ export function StoreProvider({ children }) {
 
       addVocab,
     };
-  }, [state]);
+  }, [state, saveError]);
 
   return <StoreContext.Provider value={api}>{children}</StoreContext.Provider>;
 }
