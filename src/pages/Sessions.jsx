@@ -1,7 +1,20 @@
 import { useMemo, useState } from 'react';
-import { CalendarDays, Plus, Trash2, ShieldCheck } from 'lucide-react';
+import {
+  CalendarDays,
+  Plus,
+  Trash2,
+  ShieldCheck,
+  Wand2,
+  Upload,
+  Download,
+  X,
+  AlertCircle,
+} from 'lucide-react';
 import { useStore } from '../store/StoreProvider.jsx';
 import { SESSION_TYPES, formatDate } from '../lib/format.js';
+import { saveFile, downloadFile } from '../lib/files.js';
+import { parseDescription, DESCRIPTION_LABELS } from '../lib/parseDescription.js';
+import { uid } from '../lib/ids.js';
 import DataTable from '../components/DataTable.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import Modal from '../components/Modal.jsx';
@@ -12,14 +25,17 @@ function emptyForm() {
     caseId: '',
     date: new Date().toISOString().slice(0, 10),
     type: SESSION_TYPES[0].value,
+    description: '',
     intervention: '',
     ahaMoment: '',
     result: '',
     nextStep: '',
     nextContact: '',
     recordingLink: '',
+    transcript: '',
     consentGiven: false,
     contentIdea: '',
+    consentFile: null,
   };
 }
 
@@ -28,6 +44,7 @@ export default function Sessions() {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
 
   const caseByNumber = useMemo(
     () => Object.fromEntries(state.cases.map((c) => [c.id, c.number])),
@@ -58,19 +75,62 @@ export default function Sessions() {
     setOpen(true);
   };
 
-  const save = () => {
-    if (!form.caseId) return setError('Fall auswählen.');
-    if (!form.consentGiven)
-      return setError('Ohne Einverständnis kann die Session nicht gespeichert werden.');
-    try {
-      createSession(form);
-      setOpen(false);
-    } catch (e) {
-      setError(e.message);
-    }
+  const set = (k) => (v) => setForm((f) => ({ ...f, [k]: v }));
+
+  const applyDescriptionParse = () => {
+    const parsed = parseDescription(form.description);
+    setForm((f) => ({
+      ...f,
+      description: parsed.description ?? '',
+      intervention: parsed.intervention || f.intervention,
+      ahaMoment: parsed.ahaMoment || f.ahaMoment,
+      result: parsed.result || f.result,
+      nextStep: parsed.nextStep || f.nextStep,
+      contentIdea: parsed.contentIdea || f.contentIdea,
+    }));
   };
 
-  const set = (k) => (v) => setForm((f) => ({ ...f, [k]: v }));
+  const save = async () => {
+    if (!form.caseId) return setError('Bitte einen Fall auswählen.');
+    if (!form.consentGiven)
+      return setError('Ohne Einverständnis-Häkchen kann die Session nicht gespeichert werden.');
+    setBusy(true);
+    setError('');
+    try {
+      let consentFileId = '';
+      let consentFileName = '';
+      let consentFileType = '';
+      if (form.consentFile) {
+        consentFileId = uid();
+        await saveFile(consentFileId, form.consentFile);
+        consentFileName = form.consentFile.name;
+        consentFileType = form.consentFile.type || 'application/octet-stream';
+      }
+      createSession({
+        caseId: form.caseId,
+        date: form.date,
+        type: form.type,
+        description: form.description,
+        intervention: form.intervention,
+        ahaMoment: form.ahaMoment,
+        result: form.result,
+        nextStep: form.nextStep,
+        nextContact: form.nextContact,
+        recordingLink: form.recordingLink,
+        transcript: form.transcript,
+        consentGiven: true,
+        contentIdea: form.contentIdea,
+        consentFileId,
+        consentFileName,
+        consentFileType,
+      });
+      setOpen(false);
+    } catch (e) {
+      setError(e.message ?? 'Speichern fehlgeschlagen.');
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -123,11 +183,30 @@ export default function Sessions() {
             {
               key: 'consent',
               label: 'Einverständnis',
-              width: 140,
-              render: () => (
-                <span className="pill pill-success">
-                  <ShieldCheck size={11} strokeWidth={2} /> bestätigt
-                </span>
+              width: 180,
+              render: (s) => (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span className="pill pill-success">
+                    <ShieldCheck size={11} strokeWidth={2} /> bestätigt
+                  </span>
+                  {s.consentFileId && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        downloadFile(s.consentFileId);
+                      }}
+                      title={s.consentFileName || 'Datei herunterladen'}
+                      style={{
+                        color: 'var(--muted)',
+                        display: 'grid',
+                        placeItems: 'center',
+                      }}
+                    >
+                      <Download size={13} strokeWidth={1.75} />
+                    </button>
+                  )}
+                </div>
               ),
             },
             {
@@ -169,22 +248,14 @@ export default function Sessions() {
         open={open}
         onClose={() => setOpen(false)}
         title="Neue Session"
-        width={720}
+        width={760}
         footer={
           <>
             <button className="btn-ghost" onClick={() => setOpen(false)}>
               Abbrechen
             </button>
-            <button
-              className="btn-primary"
-              onClick={save}
-              disabled={!form.caseId || !form.consentGiven}
-              style={{
-                opacity: !form.caseId || !form.consentGiven ? 0.5 : 1,
-                cursor: !form.caseId || !form.consentGiven ? 'not-allowed' : 'pointer',
-              }}
-            >
-              Speichern
+            <button className="btn-primary" onClick={save} disabled={busy}>
+              {busy ? 'Speichere…' : 'Speichern'}
             </button>
           </>
         }
@@ -196,11 +267,55 @@ export default function Sessions() {
             gap: 14,
           }}
         >
+          <Field
+            label="Beschreibung"
+            hint="Bitte anonymisiert einfügen, keine Klarnamen."
+            style={{ gridColumn: 'span 2' }}
+          >
+            <textarea
+              className="input"
+              rows={6}
+              placeholder="Vorstrukturierten Fließtext aus deiner externen KI hier einfügen. Mit den Labels unten kannst du den Inhalt automatisch in die Felder verteilen."
+              value={form.description}
+              onChange={(e) => set('description')(e.target.value)}
+            />
+            <div
+              style={{
+                marginTop: 8,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
+                flexWrap: 'wrap',
+              }}
+            >
+              <button
+                type="button"
+                className="btn-ghost"
+                onClick={applyDescriptionParse}
+                disabled={!form.description.trim()}
+                style={{
+                  opacity: form.description.trim() ? 1 : 0.5,
+                  cursor: form.description.trim() ? 'pointer' : 'not-allowed',
+                  fontSize: 12.5,
+                }}
+              >
+                <Wand2 size={14} strokeWidth={1.75} /> Felder aus Beschreibung füllen
+              </button>
+              <span style={{ fontSize: 11.5, color: 'var(--muted)' }}>
+                Erkannte Labels:{' '}
+                {DESCRIPTION_LABELS.map((l) => l.label).join('  ·  ')}
+              </span>
+            </div>
+          </Field>
+
           <Field label="Fall" required>
             <select
               className="input"
               value={form.caseId}
-              onChange={(e) => set('caseId')(e.target.value)}
+              onChange={(e) => {
+                set('caseId')(e.target.value);
+                if (e.target.value) setError('');
+              }}
             >
               <option value="">Fall auswählen…</option>
               {state.cases.map((c) => (
@@ -299,6 +414,19 @@ export default function Sessions() {
             />
           </Field>
 
+          <Field
+            label="Transkript (anonymisiert)"
+            hint="Nur anonymisierte Transkripte einfügen. Namen durch Rollen ersetzen (z. B. Partnerin A, Sohn, Hund)."
+            style={{ gridColumn: 'span 2' }}
+          >
+            <textarea
+              className="input"
+              rows={5}
+              value={form.transcript}
+              onChange={(e) => set('transcript')(e.target.value)}
+            />
+          </Field>
+
           <div
             style={{
               gridColumn: 'span 2',
@@ -310,6 +438,9 @@ export default function Sessions() {
               border: `1px solid ${
                 form.consentGiven ? 'rgba(74,222,128,0.3)' : 'rgba(238,76,39,0.3)'
               }`,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 12,
             }}
           >
             <label
@@ -323,7 +454,10 @@ export default function Sessions() {
               <input
                 type="checkbox"
                 checked={form.consentGiven}
-                onChange={(e) => set('consentGiven')(e.target.checked)}
+                onChange={(e) => {
+                  set('consentGiven')(e.target.checked);
+                  if (e.target.checked) setError('');
+                }}
                 style={{
                   marginTop: 2,
                   width: 18,
@@ -342,26 +476,91 @@ export default function Sessions() {
                   Einverständnis liegt vor *
                 </strong>
                 <span style={{ color: 'var(--muted)' }}>
-                  Pflichtfeld. Ohne explizite Bestätigung kann diese Session nicht
-                  gespeichert werden.
+                  Pflichtfeld. Ohne explizite Bestätigung kann diese Session nicht gespeichert werden.
                 </span>
               </span>
             </label>
+
+            <ConsentFileUpload
+              file={form.consentFile}
+              onChange={(file) => set('consentFile')(file)}
+            />
           </div>
 
           {error && (
             <div
               style={{
                 gridColumn: 'span 2',
+                display: 'flex',
+                gap: 10,
+                padding: 12,
+                borderRadius: 10,
+                background: 'rgba(238,76,39,0.1)',
+                border: '1px solid rgba(238,76,39,0.3)',
                 color: '#ff8888',
-                fontSize: 12.5,
+                fontSize: 13,
               }}
             >
-              {error}
+              <AlertCircle size={16} strokeWidth={2} style={{ flexShrink: 0, marginTop: 1 }} />
+              <span>{error}</span>
             </div>
           )}
         </div>
       </Modal>
+    </div>
+  );
+}
+
+function ConsentFileUpload({ file, onChange }) {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+        paddingTop: 8,
+        borderTop: '1px solid rgba(255,255,255,0.05)',
+      }}
+    >
+      <label
+        className="btn-ghost"
+        style={{ cursor: 'pointer', fontSize: 12.5 }}
+      >
+        <Upload size={14} strokeWidth={1.75} />
+        {file ? 'Andere Datei wählen' : 'Einverständnis-Datei hochladen'}
+        <input
+          type="file"
+          onChange={(e) => onChange(e.target.files?.[0] || null)}
+          style={{ display: 'none' }}
+        />
+      </label>
+      {file ? (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            fontSize: 12.5,
+            color: 'var(--text)',
+          }}
+        >
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 280 }}>
+            {file.name}
+          </span>
+          <button
+            type="button"
+            onClick={() => onChange(null)}
+            aria-label="Datei entfernen"
+            style={{ color: 'var(--muted)' }}
+          >
+            <X size={13} strokeWidth={2} />
+          </button>
+        </div>
+      ) : (
+        <span style={{ fontSize: 11.5, color: 'var(--muted)' }}>
+          Beliebiges Format. Lokal abgelegt, nicht öffentlich.
+        </span>
+      )}
     </div>
   );
 }

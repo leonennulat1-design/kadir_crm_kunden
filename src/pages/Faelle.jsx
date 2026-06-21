@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { FolderOpen, Plus, Trash2 } from 'lucide-react';
+import { FolderOpen, Plus, Trash2, AlertCircle } from 'lucide-react';
 import { useStore } from '../store/StoreProvider.jsx';
 import DataTable from '../components/DataTable.jsx';
 import EmptyState from '../components/EmptyState.jsx';
@@ -32,6 +32,7 @@ export default function Faelle() {
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(emptyForm);
+  const [error, setError] = useState('');
 
   const customerByNumber = useMemo(
     () => Object.fromEntries(state.customers.map((c) => [c.id, c.number])),
@@ -41,7 +42,6 @@ export default function Faelle() {
     () => Object.fromEntries(state.patterns.map((p) => [p.id, p.name])),
     [state.patterns]
   );
-  const patternOptions = state.patterns.map((p) => ({ id: p.id, label: p.name }));
 
   const rows = useMemo(() => {
     const list = filterCustomerId
@@ -52,12 +52,14 @@ export default function Faelle() {
 
   const startCreate = () => {
     setEditingId(null);
+    setError('');
     setForm({ ...emptyForm(), customerId: filterCustomerId || '' });
     setOpen(true);
   };
 
   const startEdit = (c) => {
     setEditingId(c.id);
+    setError('');
     setForm({
       customerId: c.customerId,
       relationshipType: c.relationshipType,
@@ -74,10 +76,18 @@ export default function Faelle() {
   };
 
   const save = () => {
-    if (!form.customerId) return;
-    if (editingId) updateCase(editingId, form);
-    else createCase(form);
-    setOpen(false);
+    if (!form.customerId) {
+      setError('Bitte einen Kunden auswählen, bevor du den Fall speicherst.');
+      return;
+    }
+    setError('');
+    try {
+      if (editingId) updateCase(editingId, form);
+      else createCase(form);
+      setOpen(false);
+    } catch (e) {
+      setError(e.message ?? 'Speichern fehlgeschlagen.');
+    }
   };
 
   const set = (k) => (v) => setForm((f) => ({ ...f, [k]: v }));
@@ -228,7 +238,7 @@ export default function Faelle() {
             <button className="btn-ghost" onClick={() => setOpen(false)}>
               Abbrechen
             </button>
-            <button className="btn-primary" onClick={save} disabled={!form.customerId}>
+            <button className="btn-primary" onClick={save}>
               Speichern
             </button>
           </>
@@ -241,11 +251,33 @@ export default function Faelle() {
             gap: 14,
           }}
         >
+          {error && (
+            <div
+              style={{
+                gridColumn: 'span 2',
+                display: 'flex',
+                gap: 10,
+                padding: 12,
+                borderRadius: 10,
+                background: 'rgba(238,76,39,0.1)',
+                border: '1px solid rgba(238,76,39,0.3)',
+                color: '#ff8888',
+                fontSize: 13,
+              }}
+            >
+              <AlertCircle size={16} strokeWidth={2} style={{ flexShrink: 0, marginTop: 1 }} />
+              <span>{error}</span>
+            </div>
+          )}
+
           <Field label="Kunde" required style={{ gridColumn: 'span 2' }}>
             <select
               className="input"
               value={form.customerId}
-              onChange={(e) => set('customerId')(e.target.value)}
+              onChange={(e) => {
+                set('customerId')(e.target.value);
+                if (e.target.value) setError('');
+              }}
             >
               <option value="">Kunde auswählen…</option>
               {state.customers.map((c) => (
@@ -277,6 +309,7 @@ export default function Faelle() {
             <textarea
               className="input"
               rows={2}
+              placeholder="Was ist konkret sichtbar passiert?"
               value={form.symptom}
               onChange={(e) => set('symptom')(e.target.value)}
             />
@@ -286,6 +319,7 @@ export default function Faelle() {
             <textarea
               className="input"
               rows={2}
+              placeholder="Was hat es ausgelöst? Welche Situation davor?"
               value={form.trigger}
               onChange={(e) => set('trigger')(e.target.value)}
             />
@@ -295,6 +329,7 @@ export default function Faelle() {
             <textarea
               className="input"
               rows={2}
+              placeholder="Worum geht es im Kern? Welches Thema steht dahinter?"
               value={form.conflictTopic}
               onChange={(e) => set('conflictTopic')(e.target.value)}
             />
@@ -304,6 +339,7 @@ export default function Faelle() {
             <textarea
               className="input"
               rows={2}
+              placeholder="Welches Muster läuft unter der Oberfläche ab? Wer reagiert worauf?"
               value={form.dynamic}
               onChange={(e) => set('dynamic')(e.target.value)}
             />
@@ -333,7 +369,7 @@ export default function Faelle() {
             <MultiComboBox
               values={linkedPatternNames}
               onChange={togglePattern}
-              options={patternOptions.map((p) => p.label)}
+              options={state.patterns.map((p) => p.name)}
               placeholder="Muster auswählen…"
             />
             {!state.patterns.length && (

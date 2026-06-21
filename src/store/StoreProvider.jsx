@@ -1,8 +1,9 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { uid, formatNumber, nextNumber } from '../lib/ids.js';
+import { deleteFile } from '../lib/files.js';
 
 const STORAGE_KEY = 'kadir-crm';
-const CURRENT_VERSION = 1;
+const CURRENT_VERSION = 2;
 
 const INITIAL_STATE = {
   version: CURRENT_VERSION,
@@ -11,8 +12,9 @@ const INITIAL_STATE = {
   sessions: [],
   patterns: [],
   revenue: [],
+  feedback: [],
   vocab: {
-    sources: ['Netzwerk', 'Social Media', 'Sonstiges'],
+    sources: ['Netzwerk', 'Social Media'],
     relationships: [
       'Partnerschaft',
       'Familie',
@@ -22,7 +24,6 @@ const INITIAL_STATE = {
       'Team',
       'Freundschaft',
       'Innerer Konflikt',
-      'Sonstiges',
     ],
     protectionPatterns: [
       'Rückzug',
@@ -44,7 +45,12 @@ function migrate(raw) {
   for (const k of Object.keys(INITIAL_STATE.vocab)) {
     if (!Array.isArray(data.vocab[k])) data.vocab[k] = [...INITIAL_STATE.vocab[k]];
   }
-  for (const k of ['customers', 'cases', 'sessions', 'patterns', 'revenue']) {
+  // v2: "Sonstiges" aus Herkunft und Beziehung entfernen
+  const stripSonstiges = (list) => list.filter((v) => v.toLowerCase() !== 'sonstiges');
+  data.vocab.sources = stripSonstiges(data.vocab.sources);
+  data.vocab.relationships = stripSonstiges(data.vocab.relationships);
+
+  for (const k of ['customers', 'cases', 'sessions', 'patterns', 'revenue', 'feedback']) {
     if (!Array.isArray(data[k])) data[k] = [];
   }
   data.version = CURRENT_VERSION;
@@ -108,12 +114,22 @@ export function StoreProvider({ children }) {
       },
 
       deleteCustomer(id) {
-        setState((s) => ({
-          ...s,
-          customers: s.customers.filter((c) => c.id !== id),
-          cases: s.cases.filter((c) => c.customerId !== id),
-          revenue: s.revenue.filter((r) => r.customerId !== id),
-        }));
+        setState((s) => {
+          const removedCaseIds = s.cases.filter((c) => c.customerId === id).map((c) => c.id);
+          const removedSessions = s.sessions.filter((sess) =>
+            removedCaseIds.includes(sess.caseId)
+          );
+          removedSessions.forEach((sess) => {
+            if (sess.consentFileId) deleteFile(sess.consentFileId).catch(() => {});
+          });
+          return {
+            ...s,
+            customers: s.customers.filter((c) => c.id !== id),
+            cases: s.cases.filter((c) => c.customerId !== id),
+            sessions: s.sessions.filter((sess) => !removedCaseIds.includes(sess.caseId)),
+            revenue: s.revenue.filter((r) => r.customerId !== id),
+          };
+        });
       },
 
       createCase(payload) {
@@ -160,11 +176,17 @@ export function StoreProvider({ children }) {
       },
 
       deleteCase(id) {
-        setState((s) => ({
-          ...s,
-          cases: s.cases.filter((c) => c.id !== id),
-          sessions: s.sessions.filter((sess) => sess.caseId !== id),
-        }));
+        setState((s) => {
+          const removed = s.sessions.filter((sess) => sess.caseId === id);
+          removed.forEach((sess) => {
+            if (sess.consentFileId) deleteFile(sess.consentFileId).catch(() => {});
+          });
+          return {
+            ...s,
+            cases: s.cases.filter((c) => c.id !== id),
+            sessions: s.sessions.filter((sess) => sess.caseId !== id),
+          };
+        });
       },
 
       createSession(payload) {
@@ -181,22 +203,40 @@ export function StoreProvider({ children }) {
               caseId: payload.caseId,
               date: payload.date ?? '',
               type: payload.type ?? '',
+              description: payload.description ?? '',
               intervention: payload.intervention ?? '',
               ahaMoment: payload.ahaMoment ?? '',
               result: payload.result ?? '',
               nextStep: payload.nextStep ?? '',
               nextContact: payload.nextContact ?? '',
               recordingLink: payload.recordingLink ?? '',
+              transcript: payload.transcript ?? '',
               consentGiven: true,
+              consentFileId: payload.consentFileId ?? '',
+              consentFileName: payload.consentFileName ?? '',
+              consentFileType: payload.consentFileType ?? '',
               contentIdea: payload.contentIdea ?? '',
+              contentAngle: payload.contentAngle ?? '',
+              contentStatus: payload.contentStatus ?? 'Idee',
             },
           ],
         }));
         return id;
       },
 
+      updateSession(id, patch) {
+        setState((s) => ({
+          ...s,
+          sessions: s.sessions.map((x) => (x.id === id ? { ...x, ...patch } : x)),
+        }));
+      },
+
       deleteSession(id) {
-        setState((s) => ({ ...s, sessions: s.sessions.filter((x) => x.id !== id) }));
+        setState((s) => {
+          const sess = s.sessions.find((x) => x.id === id);
+          if (sess?.consentFileId) deleteFile(sess.consentFileId).catch(() => {});
+          return { ...s, sessions: s.sessions.filter((x) => x.id !== id) };
+        });
       },
 
       createPattern(payload) {
@@ -260,6 +300,28 @@ export function StoreProvider({ children }) {
 
       deleteRevenue(id) {
         setState((s) => ({ ...s, revenue: s.revenue.filter((r) => r.id !== id) }));
+      },
+
+      createFeedback({ text, page }) {
+        if (!text?.trim()) return null;
+        const id = uid();
+        setState((s) => ({
+          ...s,
+          feedback: [
+            ...s.feedback,
+            {
+              id,
+              text: text.trim(),
+              page: page ?? '',
+              createdAt: new Date().toISOString(),
+            },
+          ],
+        }));
+        return id;
+      },
+
+      deleteFeedback(id) {
+        setState((s) => ({ ...s, feedback: s.feedback.filter((f) => f.id !== id) }));
       },
 
       addVocab,

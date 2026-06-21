@@ -5,7 +5,9 @@ import {
   FolderOpen,
   CalendarDays,
   Layers,
+  Sparkles,
   Euro,
+  BarChart3,
   Settings as SettingsIcon,
 } from 'lucide-react';
 
@@ -15,7 +17,9 @@ const NAV_ITEMS = [
   { to: '/faelle', label: 'Fälle', icon: FolderOpen },
   { to: '/sessions', label: 'Sessions', icon: CalendarDays },
   { to: '/muster', label: 'Muster', icon: Layers },
+  { to: '/content', label: 'Content', icon: Sparkles },
   { to: '/umsatz', label: 'Umsatz', icon: Euro },
+  { to: '/auswertung', label: 'Auswertung', icon: BarChart3 },
   { to: '/einstellungen', label: 'Einstellungen', icon: SettingsIcon },
 ];
 

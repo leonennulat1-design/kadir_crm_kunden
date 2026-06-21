@@ -8,8 +8,10 @@ const PAGE_META = {
   '/faelle': { title: 'Fälle', subtitle: 'Dokumentierte Konfliktfälle für die Musteranalyse' },
   '/sessions': { title: 'Sessions', subtitle: 'Session-Dokumentation mit Einverständnis' },
   '/muster': { title: 'Muster', subtitle: 'Methoden-Bibliothek aus wiederkehrenden Dynamiken' },
+  '/content': { title: 'Content', subtitle: 'Ideen aus deinen Sessions, sortiert und bewertbar' },
   '/umsatz': { title: 'Umsatz', subtitle: 'Erlöse nach Stufe' },
-  '/einstellungen': { title: 'Einstellungen', subtitle: 'Workspace' },
+  '/auswertung': { title: 'Auswertung', subtitle: 'Kennzahlen und Export für externe KI-Analyse' },
+  '/einstellungen': { title: 'Einstellungen', subtitle: 'Workspace und Feedback' },
 };
 
 export default function Layout() {
