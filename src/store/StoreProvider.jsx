@@ -2,7 +2,13 @@ import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { uid, formatNumber, nextNumber } from '../lib/ids.js';
 
 const STORAGE_KEY = 'kadir-crm';
-const CURRENT_VERSION = 3;
+const CURRENT_VERSION = 4;
+
+export const SOURCE_OPTIONS = [
+  'Netzwerk',
+  'Social Media',
+  'Bestandskunde: HM-Coaching',
+];
 
 const INITIAL_STATE = {
   version: CURRENT_VERSION,
@@ -13,7 +19,7 @@ const INITIAL_STATE = {
   revenue: [],
   feedback: [],
   vocab: {
-    sources: ['Netzwerk', 'Social Media', 'Bestandskunde: Hund-Mensch-Coaching'],
+    sources: [...SOURCE_OPTIONS],
     relationships: [
       'Partnerschaft',
       'Familie',
@@ -44,20 +50,26 @@ function migrate(raw) {
   for (const k of Object.keys(INITIAL_STATE.vocab)) {
     if (!Array.isArray(data.vocab[k])) data.vocab[k] = [...INITIAL_STATE.vocab[k]];
   }
-  // v2: "Sonstiges" aus Herkunft und Beziehung entfernen
-  const stripSonstiges = (list) => list.filter((v) => v.toLowerCase() !== 'sonstiges');
-  data.vocab.sources = stripSonstiges(data.vocab.sources);
-  data.vocab.relationships = stripSonstiges(data.vocab.relationships);
+  // v2: "Sonstiges" aus Beziehung entfernen (Herkunft wird unten ohnehin hart gesetzt)
+  data.vocab.relationships = data.vocab.relationships.filter(
+    (v) => v.toLowerCase() !== 'sonstiges'
+  );
 
-  // Fehlende Default-Werte für Herkunft ergänzen, Eigeneinträge bleiben erhalten
-  const lowerSources = new Set(data.vocab.sources.map((v) => v.toLowerCase()));
-  for (const def of INITIAL_STATE.vocab.sources) {
-    if (!lowerSources.has(def.toLowerCase())) data.vocab.sources.push(def);
-  }
+  // v4: Herkunft ist eine geschlossene Liste. Frei eingetippte Werte raus.
+  data.vocab.sources = [...SOURCE_OPTIONS];
 
   for (const k of ['customers', 'cases', 'sessions', 'patterns', 'revenue', 'feedback']) {
     if (!Array.isArray(data[k])) data[k] = [];
   }
+
+  // v4: Kunden-Herkunft auf leer setzen, wenn nicht in der geschlossenen Liste
+  const validSources = new Set(SOURCE_OPTIONS.map((v) => v.toLowerCase()));
+  data.customers = data.customers.map((c) => {
+    if (c.source && !validSources.has(c.source.toLowerCase())) {
+      return { ...c, source: '' };
+    }
+    return c;
+  });
 
   // v3: Einverständnis-Datei-Felder aus Sessions entfernen
   data.sessions = data.sessions.map((s) => {
@@ -109,20 +121,28 @@ export function StoreProvider({ children }) {
 
       createCustomer({ source }) {
         const id = uid();
+        const safeSource = SOURCE_OPTIONS.includes(source) ? source : '';
         setState((s) => {
           const number = formatNumber('K', nextNumber(s.customers, 'number'));
-          return { ...s, customers: [...s.customers, { id, number, source }] };
+          return {
+            ...s,
+            customers: [...s.customers, { id, number, source: safeSource }],
+          };
         });
-        if (source) addVocab('sources', source);
         return id;
       },
 
       updateCustomer(id, patch) {
+        const safePatch = { ...patch };
+        if ('source' in safePatch) {
+          safePatch.source = SOURCE_OPTIONS.includes(safePatch.source)
+            ? safePatch.source
+            : '';
+        }
         setState((s) => ({
           ...s,
-          customers: s.customers.map((c) => (c.id === id ? { ...c, ...patch } : c)),
+          customers: s.customers.map((c) => (c.id === id ? { ...c, ...safePatch } : c)),
         }));
-        if (patch.source) addVocab('sources', patch.source);
       },
 
       deleteCustomer(id) {

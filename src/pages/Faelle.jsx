@@ -200,8 +200,14 @@ export default function Faelle() {
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
-                    if (confirm(`Fall ${c.number} und alle Sessions löschen?`))
-                      deleteCase(c.id);
+                    const sessionCount = state.sessions.filter(
+                      (s) => s.caseId === c.id
+                    ).length;
+                    let msg = `Fall ${c.number} wirklich löschen?`;
+                    if (sessionCount) {
+                      msg += `\n\n${sessionCount === 1 ? '1 Session' : `${sessionCount} Sessions`} werden ebenfalls gelöscht.`;
+                    }
+                    if (confirm(msg)) deleteCase(c.id);
                   }}
                   aria-label="Löschen"
                   style={{ color: 'var(--muted)', padding: 4 }}

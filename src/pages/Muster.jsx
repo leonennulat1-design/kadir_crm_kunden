@@ -129,7 +129,11 @@ export default function Muster() {
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
-                  if (confirm(`Muster "${p.name}" löschen?`)) deletePattern(p.id);
+                  let msg = `Muster "${p.name}" wirklich löschen?`;
+                  if (p.count) {
+                    msg += `\n\nDie Verknüpfung wird aus ${p.count === 1 ? '1 Fall' : `${p.count} Fällen`} entfernt.`;
+                  }
+                  if (confirm(msg)) deletePattern(p.id);
                 }}
                 aria-label="Löschen"
                 style={{ color: 'var(--muted)', padding: 4 }}

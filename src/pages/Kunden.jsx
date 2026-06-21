@@ -1,12 +1,15 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Users, Plus, Trash2 } from 'lucide-react';
-import { useStore } from '../store/StoreProvider.jsx';
+import { useStore, SOURCE_OPTIONS } from '../store/StoreProvider.jsx';
 import DataTable from '../components/DataTable.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import Modal from '../components/Modal.jsx';
 import Field from '../components/forms/Field.jsx';
-import ComboBox from '../components/forms/ComboBox.jsx';
+
+function pluralize(n, sg, pl) {
+  return `${n} ${n === 1 ? sg : pl}`;
+}
 
 export default function Kunden() {
   const { state, createCustomer, updateCustomer, deleteCustomer } = useStore();
@@ -52,6 +55,27 @@ export default function Kunden() {
     setOpen(false);
     setSource('');
     setEditingId(null);
+  };
+
+  const askDelete = (customer) => {
+    const customerCases = state.cases.filter((c) => c.customerId === customer.id);
+    const caseIds = new Set(customerCases.map((c) => c.id));
+    const customerSessions = state.sessions.filter((s) => caseIds.has(s.caseId));
+    const customerRevenue = state.revenue.filter((r) => r.customerId === customer.id);
+
+    let msg = `Kunde ${customer.number} wirklich löschen?`;
+    const parts = [];
+    if (customerCases.length) parts.push(pluralize(customerCases.length, 'Fall', 'Fälle'));
+    if (customerSessions.length)
+      parts.push(pluralize(customerSessions.length, 'Session', 'Sessions'));
+    if (customerRevenue.length)
+      parts.push(pluralize(customerRevenue.length, 'Umsatzeintrag', 'Umsatzeinträge'));
+
+    if (parts.length) {
+      msg += `\n\nFolgende verknüpfte Datensätze werden ebenfalls gelöscht:\n• ${parts.join('\n• ')}`;
+    }
+
+    if (confirm(msg)) deleteCustomer(customer.id);
   };
 
   return (
@@ -108,9 +132,7 @@ export default function Kunden() {
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
-                  if (confirm(`Kunde ${r.number} mit allen Fällen und Umsätzen löschen?`)) {
-                    deleteCustomer(r.id);
-                  }
+                  askDelete(r);
                 }}
                 aria-label="Löschen"
                 style={{ color: 'var(--muted)', padding: 4 }}
@@ -167,12 +189,19 @@ export default function Kunden() {
               Klarnamen, E-Mails oder Telefonnummern gespeichert.
             </div>
           )}
-          <Field label="Herkunft" hint="Auswählen oder neuen Wert eintippen.">
-            <ComboBox
+          <Field label="Herkunft">
+            <select
+              className="input"
               value={source}
-              onChange={setSource}
-              options={state.vocab.sources}
-            />
+              onChange={(e) => setSource(e.target.value)}
+            >
+              <option value="">— bitte wählen —</option>
+              {SOURCE_OPTIONS.map((opt) => (
+                <option key={opt} value={opt}>
+                  {opt}
+                </option>
+              ))}
+            </select>
           </Field>
         </div>
       </Modal>
