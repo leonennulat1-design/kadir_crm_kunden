@@ -10,6 +10,7 @@ export default function MultiComboBox({
   const [input, setInput] = useState('');
   const [open, setOpen] = useState(false);
   const wrapRef = useRef(null);
+  const inputRef = useRef(null);
 
   useEffect(() => {
     function onDoc(e) {
@@ -19,12 +20,21 @@ export default function MultiComboBox({
     return () => document.removeEventListener('mousedown', onDoc);
   }, []);
 
+  const focusInput = () => {
+    requestAnimationFrame(() => inputRef.current?.focus());
+  };
+
   const add = (val) => {
-    const v = val.trim();
+    const v = (val ?? '').trim();
     if (!v) return;
-    if (values.some((x) => x.toLowerCase() === v.toLowerCase())) return;
+    if (values.some((x) => x.toLowerCase() === v.toLowerCase())) {
+      setInput('');
+      focusInput();
+      return;
+    }
     onChange([...values, v]);
     setInput('');
+    focusInput();
   };
 
   const remove = (val) => onChange(values.filter((v) => v !== val));
@@ -35,6 +45,11 @@ export default function MultiComboBox({
       (!lower || o.toLowerCase().includes(lower)) &&
       !values.some((v) => v.toLowerCase() === o.toLowerCase())
   );
+
+  const canAddCustom =
+    input.trim() &&
+    !options.some((o) => o.toLowerCase() === lower) &&
+    !values.some((v) => v.toLowerCase() === lower);
 
   return (
     <div ref={wrapRef} style={{ position: 'relative' }}>
@@ -47,12 +62,16 @@ export default function MultiComboBox({
           alignItems: 'center',
           padding: 8,
           minHeight: 44,
+          cursor: 'text',
         }}
-        onClick={() => setOpen(true)}
+        onClick={() => {
+          setOpen(true);
+          focusInput();
+        }}
       >
         {values.map((v) => (
           <span
-            key={v}
+            key={`chip-${v}`}
             style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -69,9 +88,11 @@ export default function MultiComboBox({
             {v}
             <button
               type="button"
+              onMouseDown={(e) => e.preventDefault()}
               onClick={(e) => {
                 e.stopPropagation();
                 remove(v);
+                focusInput();
               }}
               aria-label={`Entfernen: ${v}`}
               style={{ color: 'inherit', display: 'grid', placeItems: 'center' }}
@@ -81,6 +102,8 @@ export default function MultiComboBox({
           </span>
         ))}
         <input
+          key="multicombo-input"
+          ref={inputRef}
           value={input}
           onChange={(e) => {
             setInput(e.target.value);
@@ -105,11 +128,12 @@ export default function MultiComboBox({
             color: 'var(--text)',
             fontSize: 13.5,
             fontFamily: 'var(--font-body)',
+            padding: '4px 2px',
           }}
         />
       </div>
 
-      {open && (suggestions.length > 0 || input.trim()) && (
+      {open && (suggestions.length > 0 || canAddCustom) && (
         <div
           style={{
             position: 'absolute',
@@ -125,32 +149,32 @@ export default function MultiComboBox({
             boxShadow: '0 16px 32px rgba(0,0,0,0.4)',
           }}
         >
-          {input.trim() &&
-            !options.some((o) => o.toLowerCase() === lower) &&
-            !values.some((v) => v.toLowerCase() === lower) && (
-              <button
-                type="button"
-                onClick={() => add(input)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  width: '100%',
-                  textAlign: 'left',
-                  padding: '10px 14px',
-                  fontSize: 13,
-                  color: 'var(--orange)',
-                  fontWeight: 600,
-                }}
-              >
-                <Plus size={14} strokeWidth={2} />
-                "{input.trim()}" hinzufügen
-              </button>
-            )}
+          {canAddCustom && (
+            <button
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => add(input)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                width: '100%',
+                textAlign: 'left',
+                padding: '10px 14px',
+                fontSize: 13,
+                color: 'var(--orange)',
+                fontWeight: 600,
+              }}
+            >
+              <Plus size={14} strokeWidth={2} />
+              "{input.trim()}" hinzufügen
+            </button>
+          )}
           {suggestions.map((opt) => (
             <button
-              key={opt}
+              key={`opt-${opt}`}
               type="button"
+              onMouseDown={(e) => e.preventDefault()}
               onClick={() => add(opt)}
               style={{
                 display: 'block',
