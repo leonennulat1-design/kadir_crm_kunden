@@ -2,18 +2,18 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import App from './App.jsx';
-import { StoreProvider } from './store/StoreProvider.jsx';
+import { AuthProvider } from './components/AuthProvider.jsx';
 import { ConfirmProvider } from './components/ConfirmProvider.jsx';
 import './index.css';
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <StoreProvider>
-      <ConfirmProvider>
-        <BrowserRouter>
+    <BrowserRouter>
+      <AuthProvider>
+        <ConfirmProvider>
           <App />
-        </BrowserRouter>
-      </ConfirmProvider>
-    </StoreProvider>
+        </ConfirmProvider>
+      </AuthProvider>
+    </BrowserRouter>
   </React.StrictMode>
 );

@@ -1,7 +1,12 @@
-import { ShieldCheck } from 'lucide-react';
+import { ShieldCheck, RefreshCcw, LogOut } from 'lucide-react';
 import FeedbackButton from './FeedbackButton.jsx';
+import { useAuth } from './AuthProvider.jsx';
+import { useStore } from '../store/StoreProvider.jsx';
 
 export default function Header({ title, subtitle }) {
+  const { user, signOut } = useAuth();
+  const { reload } = useStore();
+
   return (
     <header className="app-header">
       <div className="app-header-inner">
@@ -11,7 +16,19 @@ export default function Header({ title, subtitle }) {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button
+            type="button"
+            className="btn-ghost"
+            onClick={() => reload()}
+            title="Daten neu von Supabase laden"
+            style={{ padding: '8px 12px', fontSize: 12.5 }}
+          >
+            <RefreshCcw size={14} strokeWidth={1.75} />
+            Aktualisieren
+          </button>
+
           <FeedbackButton />
+
           <div
             style={{
               display: 'inline-flex',
@@ -32,6 +49,17 @@ export default function Header({ title, subtitle }) {
             <ShieldCheck size={13} strokeWidth={2} />
             Pseudonymisiert
           </div>
+
+          <button
+            type="button"
+            className="btn-ghost"
+            onClick={() => signOut()}
+            title={user?.email ? `Abmelden (${user.email})` : 'Abmelden'}
+            style={{ padding: '8px 12px', fontSize: 12.5 }}
+          >
+            <LogOut size={14} strokeWidth={1.75} />
+            Abmelden
+          </button>
         </div>
       </div>
     </header>

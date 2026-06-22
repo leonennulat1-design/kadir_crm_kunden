@@ -1,8 +1,7 @@
-import { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { uid, formatNumber, nextNumber } from '../lib/ids.js';
-
-const STORAGE_KEY = 'kadir-crm';
-const CURRENT_VERSION = 5;
+import { supabase, formatSupabaseError } from '../lib/supabase.js';
+import SplashScreen from '../components/SplashScreen.jsx';
 
 export const SOURCE_OPTIONS = [
   'Netzwerk',
@@ -10,8 +9,7 @@ export const SOURCE_OPTIONS = [
   'Bestandskunde: HM-Coaching',
 ];
 
-const INITIAL_STATE = {
-  version: CURRENT_VERSION,
+const EMPTY_STATE = {
   lastBackupAt: null,
   customers: [],
   cases: [],
@@ -20,152 +18,160 @@ const INITIAL_STATE = {
   revenue: [],
   feedback: [],
   vocab: {
-    sources: [...SOURCE_OPTIONS],
-    relationships: [
-      'Partnerschaft',
-      'Familie',
-      'Eltern-Kind',
-      'Mensch-Hund',
-      'Führung/Beruf',
-      'Team',
-      'Freundschaft',
-      'Innerer Konflikt',
-    ],
-    protectionPatterns: [
-      'Rückzug',
-      'Kontrolle',
-      'Anpassung',
-      'Angriff',
-      'Rechtfertigung',
-      'Retten',
-    ],
+    sources: [],
+    relationships: [],
+    protectionPatterns: [],
     needs: [],
     topics: [],
   },
 };
 
-function migrate(raw) {
-  if (!raw || typeof raw !== 'object') return INITIAL_STATE;
-  let data = { ...INITIAL_STATE, ...raw };
-  data.vocab = { ...INITIAL_STATE.vocab, ...(raw.vocab ?? {}) };
-  for (const k of Object.keys(INITIAL_STATE.vocab)) {
-    if (!Array.isArray(data.vocab[k])) data.vocab[k] = [...INITIAL_STATE.vocab[k]];
+function groupVocab(rows) {
+  const out = { sources: [], relationships: [], protectionPatterns: [], needs: [], topics: [] };
+  for (const row of rows ?? []) {
+    const cat = row.category;
+    if (!out[cat]) out[cat] = [];
+    out[cat].push(row.value);
   }
-  // v2: "Sonstiges" aus Beziehung entfernen (Herkunft wird unten ohnehin hart gesetzt)
-  data.vocab.relationships = data.vocab.relationships.filter(
-    (v) => v.toLowerCase() !== 'sonstiges'
-  );
-
-  // v4: Herkunft ist eine geschlossene Liste. Frei eingetippte Werte raus.
-  data.vocab.sources = [...SOURCE_OPTIONS];
-
-  for (const k of ['customers', 'cases', 'sessions', 'patterns', 'revenue', 'feedback']) {
-    if (!Array.isArray(data[k])) data[k] = [];
-  }
-
-  // v4: Kunden-Herkunft auf leer setzen, wenn nicht in der geschlossenen Liste
-  const validSources = new Set(SOURCE_OPTIONS.map((v) => v.toLowerCase()));
-  data.customers = data.customers.map((c) => {
-    if (c.source && !validSources.has(c.source.toLowerCase())) {
-      return { ...c, source: '' };
-    }
-    return c;
-  });
-
-  // v3: Einverständnis-Datei-Felder aus Sessions entfernen
-  // v5: recordingLink aus Sessions entfernen (Feld nicht mehr genutzt)
-  data.sessions = data.sessions.map((s) => {
-    const { consentFileId, consentFileName, consentFileType, recordingLink, ...rest } = s;
-    return rest;
-  });
-
-  if (typeof data.lastBackupAt !== 'string' && data.lastBackupAt !== null) {
-    data.lastBackupAt = null;
-  }
-
-  data.version = CURRENT_VERSION;
-  return data;
+  return out;
 }
 
-function load() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return INITIAL_STATE;
-    return migrate(JSON.parse(raw));
-  } catch {
-    return INITIAL_STATE;
+async function loadAll() {
+  const [customers, cases, sessions, patterns, revenue, feedback, vocab, appState] =
+    await Promise.all([
+      supabase.from('customers').select('*'),
+      supabase.from('cases').select('*'),
+      supabase.from('sessions').select('*'),
+      supabase.from('patterns').select('*'),
+      supabase.from('revenue').select('*'),
+      supabase.from('feedback').select('*'),
+      supabase.from('vocab').select('*'),
+      supabase.from('app_state').select('*').eq('id', 1).maybeSingle(),
+    ]);
+
+  for (const r of [customers, cases, sessions, patterns, revenue, feedback, vocab, appState]) {
+    if (r.error) throw r.error;
   }
+
+  return {
+    customers: customers.data ?? [],
+    cases: (cases.data ?? []).map((c) => ({
+      ...c,
+      linkedPatterns: c.linkedPatterns ?? [],
+      linkedTopics: c.linkedTopics ?? [],
+    })),
+    sessions: sessions.data ?? [],
+    patterns: patterns.data ?? [],
+    revenue: revenue.data ?? [],
+    feedback: feedback.data ?? [],
+    vocab: groupVocab(vocab.data),
+    lastBackupAt: appState.data?.lastBackupAt ?? null,
+  };
 }
 
 const StoreContext = createContext(null);
 
 export function StoreProvider({ children }) {
-  const [state, setState] = useState(load);
+  const [state, setState] = useState(EMPTY_STATE);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
   const [saveError, setSaveError] = useState(null);
 
   useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await loadAll();
+        if (cancelled) return;
+        setState(data);
+        setLoading(false);
+      } catch (e) {
+        if (cancelled) return;
+        setLoadError(formatSupabaseError(e));
+        setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Eine Mutation läuft so: lokal vorab anwenden, dann an Supabase senden.
+  // Bei Fehler kippt der Banner — die UI bleibt benutzbar, der User weiß,
+  // dass die letzte Änderung beim nächsten Reload möglicherweise fehlt.
+  const runRemote = useCallback(async (op, contextLabel) => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      const result = await op();
+      if (result?.error) throw result.error;
       setSaveError((curr) => (curr === null ? curr : null));
+      return result;
     } catch (e) {
-      const isQuota =
-        e?.name === 'QuotaExceededError' ||
-        e?.code === 22 ||
-        e?.code === 1014;
-      const msg = isQuota
-        ? 'Speicher voll. Lade ein Backup herunter und lösche alte Datensätze, sonst gehen Änderungen beim Refresh verloren.'
-        : `Speichern fehlgeschlagen: ${e?.message || 'unbekannter Fehler'}. Änderungen können beim Refresh verloren gehen.`;
-      console.error('[CRM] LocalStorage-Schreibfehler:', e);
+      const msg = `${contextLabel}: ${formatSupabaseError(e)}`;
+      console.error('[CRM] Supabase-Fehler:', e);
       setSaveError((curr) => (curr === msg ? curr : msg));
+      return { error: e };
     }
-  }, [state]);
+  }, []);
+
+  const addVocab = useCallback(
+    async (category, value) => {
+      const trimmed = (value ?? '').trim();
+      if (!trimmed) return;
+      let alreadyKnown = false;
+      setState((s) => {
+        const list = s.vocab[category] ?? [];
+        if (list.some((v) => v.toLowerCase() === trimmed.toLowerCase())) {
+          alreadyKnown = true;
+          return s;
+        }
+        return { ...s, vocab: { ...s.vocab, [category]: [...list, trimmed] } };
+      });
+      if (alreadyKnown) return;
+      await runRemote(
+        () => supabase.from('vocab').insert({ category, value: trimmed }),
+        'Vokabular speichern'
+      );
+    },
+    [runRemote]
+  );
 
   const api = useMemo(() => {
-    const addVocab = (key, value) => {
-      if (!value) return;
-      setState((s) => {
-        const list = s.vocab[key] ?? [];
-        if (list.some((v) => v.toLowerCase() === value.toLowerCase())) return s;
-        return { ...s, vocab: { ...s.vocab, [key]: [...list, value] } };
-      });
-    };
-
-    const addVocabMany = (key, values) => {
-      values.filter(Boolean).forEach((v) => addVocab(key, v));
-    };
+    const addVocabMany = (category, values) =>
+      Promise.all((values ?? []).filter(Boolean).map((v) => addVocab(category, v)));
 
     return {
       state,
       saveError,
       clearSaveError: () => setSaveError(null),
 
-      createCustomer({ source }) {
+      async createCustomer({ source }) {
         const id = uid();
         const safeSource = SOURCE_OPTIONS.includes(source) ? source : '';
-        setState((s) => {
-          const number = formatNumber('K', nextNumber(s.customers, 'number'));
-          return {
-            ...s,
-            customers: [...s.customers, { id, number, source: safeSource }],
-          };
-        });
+        const number = formatNumber('K', nextNumber(state.customers, 'number'));
+        const row = { id, number, source: safeSource };
+        setState((s) => ({ ...s, customers: [...s.customers, row] }));
+        await runRemote(() => supabase.from('customers').insert(row), 'Kunde anlegen');
         return id;
       },
 
-      updateCustomer(id, patch) {
+      async updateCustomer(id, patch) {
         const safePatch = { ...patch };
         if ('source' in safePatch) {
-          safePatch.source = SOURCE_OPTIONS.includes(safePatch.source)
-            ? safePatch.source
-            : '';
+          safePatch.source = SOURCE_OPTIONS.includes(safePatch.source) ? safePatch.source : '';
         }
         setState((s) => ({
           ...s,
           customers: s.customers.map((c) => (c.id === id ? { ...c, ...safePatch } : c)),
         }));
+        await runRemote(
+          () => supabase.from('customers').update(safePatch).eq('id', id),
+          'Kunde aktualisieren'
+        );
       },
 
-      deleteCustomer(id) {
+      async deleteCustomer(id) {
+        // ON DELETE CASCADE in der DB räumt FKs auf — lokal ziehen wir
+        // dieselbe Linie, damit der State nicht auf verwaiste IDs zeigt.
         setState((s) => {
           const removedCaseIds = s.cases.filter((c) => c.customerId === id).map((c) => c.id);
           return {
@@ -176,34 +182,32 @@ export function StoreProvider({ children }) {
             revenue: s.revenue.filter((r) => r.customerId !== id),
           };
         });
+        await runRemote(
+          () => supabase.from('customers').delete().eq('id', id),
+          'Kunde löschen'
+        );
       },
 
-      createCase(payload) {
+      async createCase(payload) {
         const id = uid();
-        setState((s) => {
-          const number = formatNumber('F', nextNumber(s.cases, 'number'));
-          return {
-            ...s,
-            cases: [
-              ...s.cases,
-              {
-                id,
-                number,
-                customerId: payload.customerId,
-                description: payload.description ?? '',
-                relationshipType: payload.relationshipType ?? '',
-                symptom: payload.symptom ?? '',
-                trigger: payload.trigger ?? '',
-                conflictTopic: payload.conflictTopic ?? '',
-                dynamic: payload.dynamic ?? '',
-                protectionPattern: payload.protectionPattern ?? '',
-                need: payload.need ?? '',
-                linkedPatterns: payload.linkedPatterns ?? [],
-                linkedTopics: payload.linkedTopics ?? [],
-              },
-            ],
-          };
-        });
+        const number = formatNumber('F', nextNumber(state.cases, 'number'));
+        const row = {
+          id,
+          number,
+          customerId: payload.customerId,
+          description: payload.description ?? '',
+          relationshipType: payload.relationshipType ?? '',
+          symptom: payload.symptom ?? '',
+          trigger: payload.trigger ?? '',
+          conflictTopic: payload.conflictTopic ?? '',
+          dynamic: payload.dynamic ?? '',
+          protectionPattern: payload.protectionPattern ?? '',
+          need: payload.need ?? '',
+          linkedPatterns: payload.linkedPatterns ?? [],
+          linkedTopics: payload.linkedTopics ?? [],
+        };
+        setState((s) => ({ ...s, cases: [...s.cases, row] }));
+        await runRemote(() => supabase.from('cases').insert(row), 'Fall anlegen');
         addVocab('relationships', payload.relationshipType);
         addVocab('protectionPatterns', payload.protectionPattern);
         addVocab('needs', payload.need);
@@ -211,101 +215,113 @@ export function StoreProvider({ children }) {
         return id;
       },
 
-      updateCase(id, patch) {
+      async updateCase(id, patch) {
         setState((s) => ({
           ...s,
           cases: s.cases.map((c) => (c.id === id ? { ...c, ...patch } : c)),
         }));
+        await runRemote(
+          () => supabase.from('cases').update(patch).eq('id', id),
+          'Fall aktualisieren'
+        );
         if (patch.relationshipType) addVocab('relationships', patch.relationshipType);
         if (patch.protectionPattern) addVocab('protectionPatterns', patch.protectionPattern);
         if (patch.need) addVocab('needs', patch.need);
         if (patch.linkedTopics) addVocabMany('topics', patch.linkedTopics);
       },
 
-      deleteCase(id) {
+      async deleteCase(id) {
         setState((s) => ({
           ...s,
           cases: s.cases.filter((c) => c.id !== id),
           sessions: s.sessions.filter((sess) => sess.caseId !== id),
         }));
+        await runRemote(() => supabase.from('cases').delete().eq('id', id), 'Fall löschen');
       },
 
-      createSession(payload) {
+      async createSession(payload) {
         if (!payload.consentGiven) {
           throw new Error('Einverständnis fehlt');
         }
         const id = uid();
-        setState((s) => ({
-          ...s,
-          sessions: [
-            ...s.sessions,
-            {
-              id,
-              caseId: payload.caseId,
-              date: payload.date ?? '',
-              type: payload.type ?? '',
-              description: payload.description ?? '',
-              intervention: payload.intervention ?? '',
-              ahaMoment: payload.ahaMoment ?? '',
-              result: payload.result ?? '',
-              nextStep: payload.nextStep ?? '',
-              nextContact: payload.nextContact ?? '',
-              transcript: payload.transcript ?? '',
-              consentGiven: true,
-              contentIdea: payload.contentIdea ?? '',
-              contentAngle: payload.contentAngle ?? '',
-              contentStatus: payload.contentStatus ?? 'Idee',
-            },
-          ],
-        }));
+        const row = {
+          id,
+          caseId: payload.caseId,
+          date: payload.date || null,
+          type: payload.type ?? '',
+          description: payload.description ?? '',
+          intervention: payload.intervention ?? '',
+          ahaMoment: payload.ahaMoment ?? '',
+          result: payload.result ?? '',
+          nextStep: payload.nextStep ?? '',
+          nextContact: payload.nextContact || null,
+          transcript: payload.transcript ?? '',
+          consentGiven: true,
+          contentIdea: payload.contentIdea ?? '',
+          contentAngle: payload.contentAngle ?? '',
+          contentStatus: payload.contentStatus ?? 'Idee',
+        };
+        setState((s) => ({ ...s, sessions: [...s.sessions, row] }));
+        await runRemote(() => supabase.from('sessions').insert(row), 'Session anlegen');
         return id;
       },
 
-      updateSession(id, patch) {
+      async updateSession(id, patch) {
         if (patch.consentGiven === false) {
           throw new Error('Einverständnis darf nicht entfernt werden.');
         }
+        const cleaned = { ...patch };
+        if ('date' in cleaned) cleaned.date = cleaned.date || null;
+        if ('nextContact' in cleaned) cleaned.nextContact = cleaned.nextContact || null;
         setState((s) => ({
           ...s,
           sessions: s.sessions.map((x) => (x.id === id ? { ...x, ...patch } : x)),
         }));
+        await runRemote(
+          () => supabase.from('sessions').update(cleaned).eq('id', id),
+          'Session aktualisieren'
+        );
       },
 
-      deleteSession(id) {
+      async deleteSession(id) {
         setState((s) => ({ ...s, sessions: s.sessions.filter((x) => x.id !== id) }));
+        await runRemote(
+          () => supabase.from('sessions').delete().eq('id', id),
+          'Session löschen'
+        );
       },
 
-      createPattern(payload) {
+      async createPattern(payload) {
         const id = uid();
-        setState((s) => {
-          const number = formatNumber('M', nextNumber(s.patterns, 'number'));
-          return {
-            ...s,
-            patterns: [
-              ...s.patterns,
-              {
-                id,
-                number,
-                name: payload.name ?? '',
-                description: payload.description ?? '',
-                typicalSymptoms: payload.typicalSymptoms ?? '',
-                typicalIntervention: payload.typicalIntervention ?? '',
-                status: payload.status ?? 'Hypothese',
-              },
-            ],
-          };
-        });
+        const number = formatNumber('M', nextNumber(state.patterns, 'number'));
+        const row = {
+          id,
+          number,
+          name: payload.name ?? '',
+          description: payload.description ?? '',
+          typicalSymptoms: payload.typicalSymptoms ?? '',
+          typicalIntervention: payload.typicalIntervention ?? '',
+          status: payload.status ?? 'Hypothese',
+        };
+        setState((s) => ({ ...s, patterns: [...s.patterns, row] }));
+        await runRemote(() => supabase.from('patterns').insert(row), 'Muster anlegen');
         return id;
       },
 
-      updatePattern(id, patch) {
+      async updatePattern(id, patch) {
         setState((s) => ({
           ...s,
           patterns: s.patterns.map((p) => (p.id === id ? { ...p, ...patch } : p)),
         }));
+        await runRemote(
+          () => supabase.from('patterns').update(patch).eq('id', id),
+          'Muster aktualisieren'
+        );
       },
 
-      deletePattern(id) {
+      async deletePattern(id) {
+        // 1) lokale Verknüpfungen entfernen
+        const affectedCases = state.cases.filter((c) => (c.linkedPatterns ?? []).includes(id));
         setState((s) => ({
           ...s,
           patterns: s.patterns.filter((p) => p.id !== id),
@@ -314,91 +330,135 @@ export function StoreProvider({ children }) {
             linkedPatterns: (c.linkedPatterns ?? []).filter((pid) => pid !== id),
           })),
         }));
+
+        // 2) Verknüpfungen in der DB aus betroffenen Fällen entfernen
+        for (const c of affectedCases) {
+          const nextLinked = (c.linkedPatterns ?? []).filter((pid) => pid !== id);
+          await runRemote(
+            () => supabase.from('cases').update({ linkedPatterns: nextLinked }).eq('id', c.id),
+            'Muster-Verknüpfung entfernen'
+          );
+        }
+
+        // 3) Muster löschen
+        await runRemote(
+          () => supabase.from('patterns').delete().eq('id', id),
+          'Muster löschen'
+        );
       },
 
-      createRevenue(payload) {
+      async createRevenue(payload) {
         const id = uid();
-        setState((s) => ({
-          ...s,
-          revenue: [
-            ...s.revenue,
-            {
-              id,
-              customerId: payload.customerId,
-              stage: payload.stage,
-              amount: Number(payload.amount) || 0,
-              date: payload.date ?? '',
-            },
-          ],
-        }));
+        const row = {
+          id,
+          customerId: payload.customerId,
+          stage: payload.stage ?? '',
+          amount: Number(payload.amount) || 0,
+          date: payload.date || null,
+        };
+        setState((s) => ({ ...s, revenue: [...s.revenue, row] }));
+        await runRemote(() => supabase.from('revenue').insert(row), 'Umsatz anlegen');
         return id;
       },
 
-      updateRevenue(id, patch) {
+      async updateRevenue(id, patch) {
+        const cleaned = { ...patch };
+        if ('amount' in cleaned) cleaned.amount = Number(cleaned.amount) || 0;
+        if ('date' in cleaned) cleaned.date = cleaned.date || null;
         setState((s) => ({
           ...s,
-          revenue: s.revenue.map((r) =>
-            r.id === id
-              ? {
-                  ...r,
-                  ...patch,
-                  amount:
-                    'amount' in patch ? Number(patch.amount) || 0 : r.amount,
-                }
-              : r
-          ),
+          revenue: s.revenue.map((r) => (r.id === id ? { ...r, ...cleaned } : r)),
         }));
+        await runRemote(
+          () => supabase.from('revenue').update(cleaned).eq('id', id),
+          'Umsatz aktualisieren'
+        );
       },
 
-      deleteRevenue(id) {
+      async deleteRevenue(id) {
         setState((s) => ({ ...s, revenue: s.revenue.filter((r) => r.id !== id) }));
+        await runRemote(
+          () => supabase.from('revenue').delete().eq('id', id),
+          'Umsatz löschen'
+        );
       },
 
-      createFeedback({ text, page }) {
-        if (!text?.trim()) return null;
+      async createFeedback({ text, page }) {
+        const trimmed = text?.trim();
+        if (!trimmed) return null;
         const id = uid();
-        setState((s) => ({
-          ...s,
-          feedback: [
-            ...s.feedback,
-            {
-              id,
-              text: text.trim(),
-              page: page ?? '',
-              createdAt: new Date().toISOString(),
-            },
-          ],
-        }));
+        const createdAt = new Date().toISOString();
+        const row = { id, text: trimmed, page: page ?? '', createdAt };
+        setState((s) => ({ ...s, feedback: [...s.feedback, row] }));
+        await runRemote(() => supabase.from('feedback').insert(row), 'Feedback speichern');
         return id;
       },
 
-      deleteFeedback(id) {
+      async deleteFeedback(id) {
         setState((s) => ({ ...s, feedback: s.feedback.filter((f) => f.id !== id) }));
+        await runRemote(
+          () => supabase.from('feedback').delete().eq('id', id),
+          'Feedback löschen'
+        );
       },
 
-      markBackupTaken() {
-        setState((s) => ({ ...s, lastBackupAt: new Date().toISOString() }));
+      async markBackupTaken() {
+        const ts = new Date().toISOString();
+        setState((s) => ({ ...s, lastBackupAt: ts }));
+        await runRemote(
+          () => supabase.from('app_state').update({ lastBackupAt: ts }).eq('id', 1),
+          'Backup-Zeitstempel speichern'
+        );
       },
 
-      importBackup(payload) {
-        let parsed = payload;
-        if (typeof payload === 'string') {
-          try {
-            parsed = JSON.parse(payload);
-          } catch (e) {
-            throw new Error('Datei ist kein gültiges JSON.');
-          }
+      // Daten neu von Supabase ziehen, damit der zweite User Änderungen sieht
+      async reload() {
+        try {
+          const data = await loadAll();
+          setState(data);
+          setSaveError(null);
+        } catch (e) {
+          setSaveError(formatSupabaseError(e));
         }
-        if (!parsed || typeof parsed !== 'object') {
-          throw new Error('Datei enthält keine Backup-Struktur.');
-        }
-        const migrated = migrate(parsed);
-        setState(migrated);
       },
 
       addVocab,
     };
-  }, [state, saveError]);
+  }, [state, saveError, runRemote, addVocab]);
+
+  if (loading) return <SplashScreen text="Daten laden…" />;
+  if (loadError) {
+    return (
+      <div
+        style={{
+          minHeight: '100vh',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: 32,
+        }}
+      >
+        <div
+          className="card"
+          style={{ padding: 32, maxWidth: 480, textAlign: 'center' }}
+        >
+          <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>
+            Daten konnten nicht geladen werden
+          </h2>
+          <p style={{ color: 'var(--muted)', fontSize: 13, marginBottom: 14 }}>
+            {loadError}
+          </p>
+          <button
+            className="btn-primary"
+            onClick={() => window.location.reload()}
+            style={{ justifyContent: 'center' }}
+          >
+            Erneut versuchen
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return <StoreContext.Provider value={api}>{children}</StoreContext.Provider>;
 }
