@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Euro, Plus, Trash2 } from 'lucide-react';
+import { Euro, Plus, Trash2, X } from 'lucide-react';
 import { useStore } from '../store/StoreProvider.jsx';
 import { REVENUE_STAGES, formatEur, formatDate, stageLabel } from '../lib/format.js';
 import { pickFields } from '../lib/forms.js';
@@ -10,6 +10,23 @@ import Field from '../components/forms/Field.jsx';
 import { useConfirm } from '../components/ConfirmProvider.jsx';
 
 const REVENUE_FIELDS = ['customerId', 'stage', 'amount', 'date'];
+
+const MONTH_FMT = new Intl.DateTimeFormat('de-DE', {
+  month: 'long',
+  year: 'numeric',
+});
+
+function monthLabel(yyyyMm) {
+  const [y, m] = yyyyMm.split('-').map(Number);
+  if (!y || !m) return yyyyMm;
+  return MONTH_FMT.format(new Date(y, m - 1, 1));
+}
+
+// "Stufe 0" / "Stufe 1" für knappe Spalten, ohne den 90-Minuten-Zusatz.
+function shortStageLabel(value) {
+  const full = stageLabel(value);
+  return full.split(' – ')[0];
+}
 
 function emptyForm() {
   return {
@@ -35,29 +52,64 @@ export default function Umsatz() {
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(emptyForm);
-  const [filter, setFilter] = useState('all');
+  const [stageFilter, setStageFilter] = useState('all');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
 
   const customerByNumber = useMemo(
     () => Object.fromEntries(state.customers.map((c) => [c.id, c.number])),
     [state.customers]
   );
 
+  // Alle Filter (Stufe + Zeitraum) wirken einheitlich auf Liste, Summen
+  // und Monatsübersicht.
+  const filteredRevenue = useMemo(() => {
+    return state.revenue.filter((r) => {
+      if (stageFilter !== 'all' && r.stage !== stageFilter) return false;
+      const d = r.date || '';
+      if (dateFrom && d < dateFrom) return false;
+      if (dateTo && d > dateTo) return false;
+      return true;
+    });
+  }, [state.revenue, stageFilter, dateFrom, dateTo]);
+
   const totalsByStage = useMemo(() => {
     const t = {};
     for (const s of REVENUE_STAGES) t[s.value] = 0;
-    for (const r of state.revenue) {
+    for (const r of filteredRevenue) {
       const v = Number(r.amount) || 0;
       if (t[r.stage] != null) t[r.stage] += v;
     }
     return t;
-  }, [state.revenue]);
+  }, [filteredRevenue]);
 
   const total = Object.values(totalsByStage).reduce((a, b) => a + b, 0);
 
-  const rows = useMemo(() => {
-    const list = filter === 'all' ? state.revenue : state.revenue.filter((r) => r.stage === filter);
-    return [...list].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-  }, [state.revenue, filter]);
+  const rows = useMemo(
+    () =>
+      [...filteredRevenue].sort((a, b) =>
+        (b.date || '').localeCompare(a.date || '')
+      ),
+    [filteredRevenue]
+  );
+
+  const monthlyOverview = useMemo(() => {
+    const grouped = new Map();
+    for (const r of filteredRevenue) {
+      const key = (r.date || '').slice(0, 7); // YYYY-MM
+      if (!key) continue;
+      if (!grouped.has(key)) {
+        const entry = { id: key, total: 0 };
+        for (const s of REVENUE_STAGES) entry[s.value] = 0;
+        grouped.set(key, entry);
+      }
+      const entry = grouped.get(key);
+      const v = Number(r.amount) || 0;
+      if (entry[r.stage] != null) entry[r.stage] += v;
+      entry.total += v;
+    }
+    return [...grouped.values()].sort((a, b) => b.id.localeCompare(a.id));
+  }, [filteredRevenue]);
 
   const startCreate = () => {
     setEditingId(null);
@@ -88,6 +140,12 @@ export default function Umsatz() {
 
   const set = (k) => (v) => setForm((f) => ({ ...f, [k]: v }));
 
+  const hasDateRange = dateFrom || dateTo;
+  const clearDateRange = () => {
+    setDateFrom('');
+    setDateTo('');
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div
@@ -112,20 +170,102 @@ export default function Umsatz() {
           flexWrap: 'wrap',
         }}
       >
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          <FilterChip active={filter === 'all'} onClick={() => setFilter('all')}>
-            Alle
-          </FilterChip>
-          {REVENUE_STAGES.map((s) => (
-            <FilterChip
-              key={s.value}
-              active={filter === s.value}
-              onClick={() => setFilter(s.value)}
-            >
-              {s.label}
+        <div
+          style={{
+            display: 'flex',
+            gap: 10,
+            flexWrap: 'wrap',
+            alignItems: 'center',
+          }}
+        >
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            <FilterChip active={stageFilter === 'all'} onClick={() => setStageFilter('all')}>
+              Alle
             </FilterChip>
-          ))}
+            {REVENUE_STAGES.map((s) => (
+              <FilterChip
+                key={s.value}
+                active={stageFilter === s.value}
+                onClick={() => setStageFilter(s.value)}
+              >
+                {s.label}
+              </FilterChip>
+            ))}
+          </div>
+
+          <div
+            style={{
+              display: 'flex',
+              gap: 6,
+              alignItems: 'center',
+              padding: '4px 10px',
+              borderRadius: 999,
+              border: '1px solid var(--border)',
+              background: 'var(--surface-2)',
+            }}
+          >
+            <span
+              style={{
+                fontSize: 11.5,
+                color: 'var(--muted)',
+                fontFamily: 'var(--font-heading)',
+                fontWeight: 600,
+                letterSpacing: '0.04em',
+                textTransform: 'uppercase',
+              }}
+            >
+              Zeitraum
+            </span>
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              aria-label="Von"
+              style={{
+                background: 'transparent',
+                border: 'none',
+                outline: 'none',
+                color: 'var(--text)',
+                fontSize: 12.5,
+                fontFamily: 'var(--font-body)',
+                padding: '4px 2px',
+              }}
+            />
+            <span style={{ color: 'var(--muted)', fontSize: 12 }}>bis</span>
+            <input
+              type="date"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              aria-label="Bis"
+              style={{
+                background: 'transparent',
+                border: 'none',
+                outline: 'none',
+                color: 'var(--text)',
+                fontSize: 12.5,
+                fontFamily: 'var(--font-body)',
+                padding: '4px 2px',
+              }}
+            />
+            {hasDateRange && (
+              <button
+                type="button"
+                onClick={clearDateRange}
+                aria-label="Zeitraum zurücksetzen"
+                title="Zeitraum zurücksetzen"
+                style={{
+                  color: 'var(--muted)',
+                  display: 'grid',
+                  placeItems: 'center',
+                  padding: 2,
+                }}
+              >
+                <X size={13} strokeWidth={2} />
+              </button>
+            )}
+          </div>
         </div>
+
         <button
           className="btn-primary"
           onClick={startCreate}
@@ -195,7 +335,11 @@ export default function Umsatz() {
           ) : (
             <EmptyState
               icon={Euro}
-              title={filter === 'all' ? 'Noch keine Umsätze' : 'Keine Umsätze in dieser Stufe'}
+              title={
+                stageFilter !== 'all' || hasDateRange
+                  ? 'Keine Umsätze für diese Filter'
+                  : 'Noch keine Umsätze'
+              }
               description="Trag ein, was deine Kunden gezahlt haben."
               action={
                 <button className="btn-primary" onClick={startCreate}>
@@ -206,6 +350,8 @@ export default function Umsatz() {
           )
         }
       />
+
+      <MonthlyOverview entries={monthlyOverview} />
 
       <Modal
         open={open}
@@ -273,6 +419,98 @@ export default function Umsatz() {
           </Field>
         </div>
       </Modal>
+    </div>
+  );
+}
+
+function MonthlyOverview({ entries }) {
+  if (!entries.length) return null;
+
+  const cellStyle = {
+    padding: '12px 18px',
+    borderBottom: '1px solid var(--border)',
+    fontSize: 13.5,
+  };
+  const headStyle = {
+    ...cellStyle,
+    textAlign: 'left',
+    fontFamily: 'var(--font-heading)',
+    fontWeight: 600,
+    fontSize: 11.5,
+    letterSpacing: '0.06em',
+    textTransform: 'uppercase',
+    color: 'var(--muted)',
+    whiteSpace: 'nowrap',
+  };
+
+  return (
+    <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+      <div
+        style={{
+          padding: '14px 18px',
+          borderBottom: '1px solid var(--border)',
+        }}
+      >
+        <h3
+          style={{
+            fontSize: 13,
+            fontWeight: 700,
+            fontFamily: 'var(--font-heading)',
+            letterSpacing: '0.02em',
+          }}
+        >
+          Monatsübersicht
+        </h3>
+      </div>
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr>
+              <th style={headStyle}>Monat</th>
+              {REVENUE_STAGES.map((s) => (
+                <th key={s.value} style={{ ...headStyle, textAlign: 'right' }}>
+                  {shortStageLabel(s.value)}
+                </th>
+              ))}
+              <th style={{ ...headStyle, textAlign: 'right' }}>Gesamt</th>
+            </tr>
+          </thead>
+          <tbody>
+            {entries.map((m, i) => {
+              const isLast = i === entries.length - 1;
+              const rowCell = isLast ? { ...cellStyle, borderBottom: 'none' } : cellStyle;
+              return (
+                <tr key={m.id}>
+                  <td style={rowCell}>{monthLabel(m.id)}</td>
+                  {REVENUE_STAGES.map((s) => (
+                    <td
+                      key={s.value}
+                      style={{
+                        ...rowCell,
+                        textAlign: 'right',
+                        color: m[s.value] ? 'var(--text)' : 'var(--muted)',
+                      }}
+                    >
+                      {formatEur(m[s.value])}
+                    </td>
+                  ))}
+                  <td
+                    style={{
+                      ...rowCell,
+                      textAlign: 'right',
+                      fontFamily: 'var(--font-heading)',
+                      fontWeight: 700,
+                      color: 'var(--orange)',
+                    }}
+                  >
+                    {formatEur(m.total)}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
