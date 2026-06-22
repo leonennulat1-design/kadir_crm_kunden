@@ -127,8 +127,17 @@ export function StoreProvider({ children }) {
         return { ...s, vocab: { ...s.vocab, [category]: [...list, trimmed] } };
       });
       if (alreadyKnown) return;
+      // upsert mit ignoreDuplicates: paralleler addVocab-Lauf oder bereits
+      // vom anderen User angelegter Wert darf den Speichervorgang nicht
+      // mit einem Unique-Constraint-Fehler abbrechen.
       await runRemote(
-        () => supabase.from('vocab').insert({ category, value: trimmed }),
+        () =>
+          supabase
+            .from('vocab')
+            .upsert(
+              { category, value: trimmed },
+              { onConflict: 'category,value', ignoreDuplicates: true }
+            ),
         'Vokabular speichern'
       );
     },
